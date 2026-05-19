@@ -27,8 +27,8 @@ Contributions that **are** in scope:
 Requirements: Python 3.12+, Docker.
 
 ```bash
-git clone https://github.com/tmanmidwest/hrWebApp.git
-cd hrWebApp
+git clone https://github.com/tmanmidwest/hrDemoWebApp.git
+cd hrDemoWebApp
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -97,7 +97,7 @@ ruff format --check .
 
 When filing an issue, include:
 
-- App version (`docker image inspect ghcr.io/tmanmidwest/hrwebapp | grep -i version`)
+- App version (`docker image inspect ghcr.io/tmanmidwest/hrdemowebapp | grep -i version`)
 - Deployment environment (local Docker, ECS, AKS, etc.)
 - Steps to reproduce
 - Expected vs actual behavior

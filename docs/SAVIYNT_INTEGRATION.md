@@ -6,6 +6,15 @@ This document describes how to point Saviynt Identity Cloud at the Demo HR Sourc
 
 Saviynt typically pulls authoritative identity data from an HR system to drive its identity lifecycle (joiner / mover / leaver) workflows. This app serves that role for non-production POCs, demos, and integration testing.
 
+## Managing the HR data
+
+You can populate, edit, and reset the HR data this app exposes to Saviynt in two ways:
+
+- **Web UI** at `/ui/employees` — best for interactive demos and ad-hoc edits. The reset feature at Settings → Reset Data lets you wipe and re-seed selected tables between demo runs.
+- **REST API** at `/api/v1/...` — best for scripted data setup or integration with test harnesses. See [API.md](API.md) for the full endpoint list.
+
+Both surfaces use the same database and the same validation rules, so changes are visible to Saviynt immediately regardless of which one made them.
+
 ## Connection model
 
 | Aspect | Value |

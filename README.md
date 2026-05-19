@@ -6,39 +6,49 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 
 ## What it does
 
-- Stores employee records with realistic HR fields (employee number, name, contact info, department, job title, manager, employment status, hire/termination dates)
-- Provides managed lookup tables for countries, states/provinces, employment statuses, departments, job titles, and managers
+- Stores employee records with realistic HR fields (employee number, name, contact info, department, job title, supervisor, employment status, hire/termination dates)
+- Provides managed lookup tables for countries, states/provinces, employment statuses, departments, and job titles
 - Exposes a full REST API for employee CRUD operations, suitable for IGA/IAM connector consumption
-- Includes a web UI for managing employees, lookups, admin users, and API credentials
+- Includes a refined-minimal web UI for managing employees, lookups, admin users, and API credentials
 - Supports both **API key** and **OAuth 2.0 Client Credentials** authentication for the REST API
+- Reset-data feature for returning to a clean state between demos
 - Ships as a single Docker container with SQLite persistence
 - Deployable locally, to AWS ECS/Fargate, Azure Container Apps, or any Kubernetes cluster
 
 ## Quick start
 
-### Local Docker
+### Local Docker Compose (recommended)
+
+```bash
+git clone https://github.com/tmanmidwest/hrDemoWebApp.git
+cd hrDemoWebApp
+docker compose up -d
+```
+
+Then open your browser to **http://localhost:8000** — the root URL redirects to the web UI, which redirects to the login page if you're not signed in.
+
+### Local Docker (image only)
 
 ```bash
 docker run -d \
   --name demo-hr-sot \
   -p 8000:8000 \
   -v $(pwd)/data:/data \
-  ghcr.io/tmanmidwest/hrwebapp:latest
+  ghcr.io/tmanmidwest/hrdemowebapp:latest
 ```
 
-Then open:
+### What's at each URL
 
-- **Web UI**: http://localhost:8000
-- **API docs (Swagger)**: http://localhost:8000/docs
-- **Health check**: http://localhost:8000/health
-
-### Docker Compose
-
-```bash
-git clone https://github.com/tmanmidwest/hrWebApp.git
-cd hrWebApp
-docker compose up -d
-```
+| URL | What you get |
+|---|---|
+| `/` | Redirects to the web UI |
+| `/ui/login` | Login page |
+| `/ui/employees` | Employee list (after login) |
+| `/ui/lookups/...` | Manage countries, states, departments, statuses, job titles |
+| `/ui/settings/...` | Manage admin users, API keys, OAuth clients, reset data |
+| `/docs` | Swagger UI for the REST API |
+| `/redoc` | Alternative REST API documentation |
+| `/health` | JSON health probe (status + DB check) |
 
 ### Default credentials
 
@@ -47,12 +57,25 @@ docker compose up -d
 | Username | `robbytheadmin` |
 | Password | `N0nPr0dF0r$@viynt8` |
 
-> These credentials are intended for non-production POC use only. Change the password immediately via the UI or rotate it using the included reset script. See [docs/SECURITY.md](docs/SECURITY.md).
+> These credentials are intended for non-production POC use only. Change the password immediately via **Settings → Admin Users → Change Password** in the UI, or rotate it using the included reset script. See [docs/SECURITY.md](docs/SECURITY.md).
+
+## The web UI
+
+The UI uses a refined-minimal admin aesthetic — quiet, professional, easy on the eyes. Key features:
+
+- **Employee list** with tabs (Active / All / Archived), sortable columns, and per-machine column visibility (saved to your browser)
+- **Add/Edit Employee** form with HTMX-powered dependent dropdowns: pick a country and the state/province list updates; pick a department and the job title list updates
+- **Lookup management** for all five lookup tables. Deletes are blocked (with a helpful 409 message) if any other row still references the target — set `is_active=false` instead
+- **API keys and OAuth clients** management. Secrets are displayed **once** at creation, then only the prefix is shown
+- **Reset Data** page with checkboxes per table and a typed-phrase confirmation guard (you must type `RESET` to enable the destructive button)
+
+For the full UI overview, see [docs/UI.md](docs/UI.md).
 
 ## Documentation
 
 | Document | What it covers |
 |---|---|
+| [UI.md](docs/UI.md) | Web UI walkthrough, design system, reset feature |
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional and non-functional requirements |
 | [SCHEMA.md](docs/SCHEMA.md) | Database schema, all tables and fields |
 | [API.md](docs/API.md) | REST API endpoints, auth, and examples |
@@ -66,8 +89,9 @@ docker compose up -d
 
 - **Backend**: Python 3.12 + FastAPI
 - **Database**: SQLite (single file, mounted volume for persistence)
-- **ORM**: SQLAlchemy 2.x
-- **Frontend**: Server-rendered Jinja2 templates + HTMX for dynamic interactions
+- **ORM**: SQLAlchemy 2.x with Alembic migrations
+- **Frontend**: Server-rendered Jinja2 templates + HTMX for dependent dropdowns
+- **Styling**: Hand-crafted CSS design system (no framework) with Geist Sans + Geist Mono
 - **Auth**: Session cookies (UI), API keys + OAuth 2.0 Client Credentials (REST API)
 - **Container**: Python slim base image, ~180MB
 

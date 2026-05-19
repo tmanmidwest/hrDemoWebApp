@@ -1,6 +1,6 @@
 # Deployment
 
-The app ships as a single Docker container. The image is published to GitHub Container Registry at `ghcr.io/tmanmidwest/hrwebapp`.
+The app ships as a single Docker container. The image is published to GitHub Container Registry at `ghcr.io/tmanmidwest/hrdemowebapp`.
 
 ## Persistent storage
 
@@ -33,7 +33,7 @@ docker run -d \
   -p 8000:8000 \
   -v $(pwd)/data:/data \
   --restart unless-stopped \
-  ghcr.io/tmanmidwest/hrwebapp:latest
+  ghcr.io/tmanmidwest/hrdemowebapp:latest
 ```
 
 Access at `http://localhost:8000`.
@@ -45,7 +45,7 @@ Access at `http://localhost:8000`.
 ```yaml
 services:
   hr-sot:
-    image: ghcr.io/tmanmidwest/hrwebapp:latest
+    image: ghcr.io/tmanmidwest/hrdemowebapp:latest
     ports:
       - "8000:8000"
     volumes:
@@ -58,6 +58,26 @@ Run with:
 ```bash
 docker compose up -d
 ```
+
+## First-time setup via the web UI
+
+Once the container is running and healthy (the `/health` endpoint returns 200), do the following the first time you stand up a new instance:
+
+1. **Open the app**. Visit `http://localhost:8000` (or your deployed hostname). The root URL redirects to `/ui/employees`, which redirects to `/ui/login` since you're not signed in yet.
+
+2. **Log in as the seeded admin**. Username `robbytheadmin`, password `N0nPr0dF0r$@viynt8`. The full credentials are also written to `/data/INITIAL_CREDENTIALS.txt` inside the container on first startup, in case you need to recover them.
+
+3. **Change the seeded admin's password**. Settings → Admin Users → click **Change Password** next to `robbytheadmin`. Use something the rest of your team can share, or your own password if it's a single-user demo instance.
+
+4. *(Optional, recommended)* **Create a personal admin account**. Settings → Admin Users → **Add Admin**. Sign out, sign back in as the new account. The seeded `robbytheadmin` can still be used by the reset script for password recovery (see [SECURITY.md](SECURITY.md)).
+
+5. **Create the credentials your integrating system will use**:
+   - For Saviynt-style API key auth: Settings → API Keys → **Create New API Key**. Name it after the consuming system. Copy the displayed `hrsot_...` value — it is shown in full **only once**.
+   - For OAuth 2.0: Settings → OAuth Clients → **Create New OAuth Client**. Copy the displayed `client_id` and `client_secret` — secret is shown once.
+
+6. **Hand the credentials and base URL to whoever is configuring the integration**. For Saviynt specifically, see [SAVIYNT_INTEGRATION.md](SAVIYNT_INTEGRATION.md).
+
+The app is now ready to serve as an HR data source. Employees, lookups, and credentials can all be managed via the UI or REST API.
 
 ## AWS ECS Fargate
 
@@ -78,7 +98,7 @@ docker compose up -d
   "memory": "1024",
   "containerDefinitions": [{
     "name": "hr-sot",
-    "image": "ghcr.io/tmanmidwest/hrwebapp:latest",
+    "image": "ghcr.io/tmanmidwest/hrdemowebapp:latest",
     "essential": true,
     "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
     "mountPoints": [{"sourceVolume": "data", "containerPath": "/data"}],
@@ -108,7 +128,7 @@ az containerapp create \
   --name demo-hr-sot \
   --resource-group <rg> \
   --environment <env> \
-  --image ghcr.io/tmanmidwest/hrwebapp:latest \
+  --image ghcr.io/tmanmidwest/hrdemowebapp:latest \
   --target-port 8000 \
   --ingress external \
   --min-replicas 1 \
@@ -124,7 +144,7 @@ Attach an Azure Files share via the Container Apps storage configuration and mou
 
 ```bash
 gcloud run deploy demo-hr-sot \
-  --image ghcr.io/tmanmidwest/hrwebapp:latest \
+  --image ghcr.io/tmanmidwest/hrdemowebapp:latest \
   --port 8000 \
   --min-instances 1 \
   --max-instances 1 \
@@ -162,7 +182,7 @@ spec:
     spec:
       containers:
       - name: hr-sot
-        image: ghcr.io/tmanmidwest/hrwebapp:latest
+        image: ghcr.io/tmanmidwest/hrdemowebapp:latest
         ports:
         - containerPort: 8000
         volumeMounts:
@@ -196,8 +216,8 @@ spec:
 ## Building from source
 
 ```bash
-git clone https://github.com/tmanmidwest/hrWebApp.git
-cd hrWebApp
+git clone https://github.com/tmanmidwest/hrDemoWebApp.git
+cd hrDemoWebApp
 docker build -t demo-hr-sot:local .
 docker run -d -p 8000:8000 -v $(pwd)/data:/data demo-hr-sot:local
 ```
@@ -240,12 +260,12 @@ Restore = stop container, replace the file, start container.
 ## Upgrading
 
 ```bash
-docker pull ghcr.io/tmanmidwest/hrwebapp:latest
+docker pull ghcr.io/tmanmidwest/hrdemowebapp:latest
 docker stop demo-hr-sot
 docker rm demo-hr-sot
 # Re-run with same volume mount
 docker run -d --name demo-hr-sot -p 8000:8000 -v $(pwd)/data:/data \
-  ghcr.io/tmanmidwest/hrwebapp:latest
+  ghcr.io/tmanmidwest/hrdemowebapp:latest
 ```
 
 Alembic migrations run automatically on container startup. The mounted volume preserves all data.
