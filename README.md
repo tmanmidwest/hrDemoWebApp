@@ -13,7 +13,7 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 - Supports both **API key** and **OAuth 2.0 Client Credentials** authentication for the REST API
 - Reset-data feature for returning to a clean state between demos
 - Ships as a single Docker container with SQLite persistence
-- Deployable locally, to AWS ECS/Fargate, Azure Container Apps, or any Kubernetes cluster
+- Deployable locally, to AWS ECS/Fargate (scripted, one command), Azure Container Apps, or any Kubernetes cluster
 
 ## Quick start
 
@@ -36,6 +36,19 @@ docker run -d \
   -v $(pwd)/data:/data \
   ghcr.io/tmanmidwest/hrdemowebapp:latest
 ```
+
+### AWS ECS Fargate (scripted)
+
+A set of shell scripts in [`docs/fargate/`](docs/fargate/) automates the full deployment to your own AWS account — no manual AWS console steps required.
+
+```bash
+cd docs/fargate
+chmod +x *.sh
+./setup.sh    # verify prerequisites
+./deploy.sh   # deploy to AWS (~10 minutes)
+```
+
+See [`docs/fargate/README.md`](docs/fargate/README.md) for the complete guide including how to update, stop, and tear down.
 
 ### What's at each URL
 
@@ -83,6 +96,7 @@ For the full UI overview, see [docs/UI.md](docs/UI.md).
 | [SAVIYNT_INTEGRATION.md](docs/SAVIYNT_INTEGRATION.md) | How to point Saviynt at this app |
 | [SECURITY.md](docs/SECURITY.md) | Auth model, password reset, API key management |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deploying to AWS, Azure, Kubernetes |
+| [fargate/README.md](docs/fargate/README.md) | Scripted AWS ECS Fargate deployment — one command deploy, update, and teardown |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute or extend the app |
 
 ## Tech stack

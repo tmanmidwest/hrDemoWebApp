@@ -81,45 +81,83 @@ The app is now ready to serve as an HR data source. Employees, lookups, and cred
 
 ## AWS ECS Fargate
 
-**Prerequisites**:
-- VPC with public and private subnets
-- EFS filesystem for persistent storage
-- ECR or use the public image directly
-- Application Load Balancer with HTTPS listener (ACM cert)
+The recommended way to deploy to AWS ECS Fargate is using the included shell scripts in [`docs/fargate/`](fargate/). They handle everything automatically — no AWS console required, no manual JSON task definitions, no kubectl.
 
-**Task definition essentials**:
+### Quick start
 
-```json
-{
-  "family": "demo-hr-sot",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
-  "containerDefinitions": [{
-    "name": "hr-sot",
-    "image": "ghcr.io/tmanmidwest/hrdemowebapp:latest",
-    "essential": true,
-    "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
-    "mountPoints": [{"sourceVolume": "data", "containerPath": "/data"}],
-    "healthCheck": {
-      "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
-      "interval": 30,
-      "timeout": 5,
-      "retries": 3
-    }
-  }],
-  "volumes": [{
-    "name": "data",
-    "efsVolumeConfiguration": {
-      "fileSystemId": "fs-xxxxx",
-      "rootDirectory": "/demo-hr-sot"
-    }
-  }]
-}
+```bash
+cd docs/fargate
+chmod +x *.sh
+./setup.sh    # checks all prerequisites and AWS permissions
+./deploy.sh   # deploys the full stack to your AWS account (~10 minutes)
 ```
 
-**Service**: 1 desired task, attached to a target group on the ALB. Do not scale beyond 1 — SQLite cannot handle concurrent writers from multiple containers.
+When `deploy.sh` completes it prints your app URL. That's the base URL to hand to Saviynt or any other IGA connector.
+
+### What the scripts create in your AWS account
+
+| Resource | Purpose |
+|---|---|
+| ECR repository | Stores your container image (built from this repo's source) |
+| ECS Cluster | Runs your Fargate tasks |
+| EFS Filesystem | Persistent storage for the SQLite `/data` directory |
+| Application Load Balancer | Public HTTP endpoint |
+| Security Groups | Network access control |
+| CloudWatch Log Group | Container log storage |
+
+Everything is isolated to your own AWS account. Each person on your team deploys their own independent instance by running the same scripts against their own account.
+
+### Managing your deployment
+
+```bash
+./manage.sh status     # check if it's running and get the URL
+./manage.sh stop       # pause the app (data kept, Fargate charges stop)
+./manage.sh start      # resume after stopping
+./manage.sh logs       # stream live container logs
+```
+
+### Deploying an update
+
+After merging changes to the `main` branch:
+
+```bash
+./update.sh
+```
+
+This pulls the latest source from GitHub, rebuilds the image, pushes it to ECR, and redeploys ECS — all automatically.
+
+### Tearing down
+
+```bash
+./teardown.sh
+```
+
+Deletes all AWS resources. Prompts for confirmation before doing anything.
+
+### Cost
+
+Running continuously in `us-east-1`:
+
+| Resource | Approx. monthly cost |
+|---|---|
+| ECS Fargate (0.25 vCPU / 0.5 GB) | ~$9 |
+| Application Load Balancer | ~$16 |
+| EFS + CloudWatch | ~$1 |
+| **Total** | **~$26/month** |
+
+Run `./manage.sh stop` when not in use to eliminate Fargate compute charges. Run `./teardown.sh` to stop all charges entirely.
+
+For full details see [`docs/fargate/README.md`](fargate/README.md).
+
+### Manual deployment reference
+
+If you prefer to deploy manually or integrate with an existing AWS setup, the key configuration points are:
+
+- **Image**: build from source (`docker buildx build --platform linux/amd64`) and push to ECR — the public GHCR image requires authentication and is not suitable for Fargate pulls
+- **CPU/Memory**: 256 CPU units / 512 MB is sufficient; the original docs suggest 512/1024 which also works
+- **Volume**: EFS with an access point owned by uid/gid 1000 mounted at `/data`
+- **Health check**: `curl -f http://localhost:8000/health || exit 1`
+- **Replicas**: always 1 — SQLite cannot handle concurrent writers
 
 ## Azure Container Apps
 
@@ -227,17 +265,11 @@ docker run -d -p 8000:8000 -v $(pwd)/data:/data demo-hr-sot:local
 After the container starts, verify:
 
 ```bash
-# Health check
 curl http://<host>:8000/health
 # Expected: {"status": "ok", "database": "ok"}
 
-# Swagger UI accessible
 curl -I http://<host>:8000/docs
 # Expected: 200 OK
-
-# Log in to the web UI
-# Username: robbytheadmin
-# Password: N0nPr0dF0r$@viynt8
 ```
 
 Read the initial credentials file to confirm seeding worked:
@@ -263,7 +295,6 @@ Restore = stop container, replace the file, start container.
 docker pull ghcr.io/tmanmidwest/hrdemowebapp:latest
 docker stop demo-hr-sot
 docker rm demo-hr-sot
-# Re-run with same volume mount
 docker run -d --name demo-hr-sot -p 8000:8000 -v $(pwd)/data:/data \
   ghcr.io/tmanmidwest/hrdemowebapp:latest
 ```
