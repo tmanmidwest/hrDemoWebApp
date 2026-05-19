@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set page_title = "Edit Employment Status" if row else "Add Employment Status" %}
+{% block breadcrumb %}
+<a href="/ui/lookups/employment-statuses">Employment Statuses</a>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ "Edit · " ~ row.label if row else "New" }}</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{% if row %}Edit Employment Status{% else %}Add Employment Status{% endif %}</h1>
+    {% if row and row.is_system %}
+    <p class="page-header__subtitle"><span class="badge badge--neutral">System</span> The numeric value of system rows cannot be changed.</p>
+    {% endif %}
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/lookups/employment-statuses" class="btn btn--ghost">← Back</a>
+  </div>
+</div>
+
+{% if error %}<div class="inline-error">{{ error }}</div>{% endif %}
+
+<form method="post" action="{{ form_action }}" class="card" style="max-width: 560px;">
+  <div class="card__body">
+    <div class="form-row">
+      <label class="label" for="label">Label<span class="label__required">*</span></label>
+      <input class="input" id="label" name="label" value="{{ form.label or '' }}" required maxlength="50" />
+      <div class="form-hint">Display name, e.g. "Active", "Leave of Absence".</div>
+    </div>
+    <div class="form-row">
+      <label class="label" for="value">Numeric Value<span class="label__required">*</span></label>
+      <input class="input mono" type="number" id="value" name="value" value="{{ form.value if form.value is not none else '' }}" required
+             {% if row and row.is_system %}readonly{% endif %} />
+      <div class="form-hint">Integer sent to integrating systems (e.g. 1 for Active, 0 for Not Active).</div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_active_status" name="is_active_status" value="1" {% if form.is_active_status %}checked{% endif %} />
+      <label for="is_active_status">Counts as currently employed (drives lifecycle decisions in IGA)</label>
+    </div>
+  </div>
+  <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
+    <a href="/ui/lookups/employment-statuses" class="btn btn--secondary">Cancel</a>
+    <button type="submit" class="btn btn--primary">{% if row %}Save{% else %}Create{% endif %}</button>
+  </div>
+</form>
+{% endblock %}

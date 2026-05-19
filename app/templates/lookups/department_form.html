@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set page_title = "Edit Department" if row else "Add Department" %}
+{% block breadcrumb %}
+<a href="/ui/lookups/departments">Departments</a>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ "Edit · " ~ row.name if row else "New" }}</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{% if row %}Edit Department{% else %}Add Department{% endif %}</h1>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/lookups/departments" class="btn btn--ghost">← Back</a>
+  </div>
+</div>
+
+{% if error %}<div class="inline-error">{{ error }}</div>{% endif %}
+
+<form method="post" action="{{ form_action }}" class="card" style="max-width: 560px;">
+  <div class="card__body">
+    <div class="form-row">
+      <label class="label" for="name">Name<span class="label__required">*</span></label>
+      <input class="input" id="name" name="name" value="{{ form.name or '' }}" required maxlength="100" />
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_active" name="is_active" value="1" {% if form.is_active %}checked{% endif %} />
+      <label for="is_active">Active</label>
+    </div>
+  </div>
+  <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
+    <a href="/ui/lookups/departments" class="btn btn--secondary">Cancel</a>
+    <button type="submit" class="btn btn--primary">{% if row %}Save{% else %}Create{% endif %}</button>
+  </div>
+</form>
+{% endblock %}

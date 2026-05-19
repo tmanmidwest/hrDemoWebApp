@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% set page_title = "Reset Data" %}
+{% block breadcrumb %}<span>Settings</span> <span class="topbar__breadcrumb-sep">/</span> <span>Reset Data</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Reset Data</h1>
+    <p class="page-header__subtitle">Wipe and re-seed selected tables. Use this during demos and integration testing to return to a clean state.</p>
+  </div>
+</div>
+
+<div class="card" style="max-width: 720px; border-color: var(--danger-line);">
+  <div class="card__header" style="background: var(--danger-soft); border-bottom-color: var(--danger-line);">
+    <h2 class="card__title" style="color: var(--danger);">⚠ Destructive Action</h2>
+  </div>
+  <form method="post" action="/ui/settings/reset" class="card__body">
+
+    <p class="text-muted mb-6">
+      Each selected table is wiped and re-seeded with default data. Admin users, API keys, and OAuth clients are <strong>never</strong> touched by reset — only employee data and lookup tables.
+    </p>
+
+    <div style="display: flex; flex-direction: column; gap: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s-4);">
+      <div class="checkbox-row" style="padding: var(--s-2) 0;">
+        <input type="checkbox" id="reset_employees" name="reset_employees" value="1" />
+        <label for="reset_employees">
+          <strong>Employees</strong>
+          <div class="text-xs text-muted">Wipe all employee records and reload the 2 sample employees in "Not Active" state.</div>
+        </label>
+      </div>
+
+      <div class="checkbox-row" style="padding: var(--s-2) 0;">
+        <input type="checkbox" id="reset_employment_statuses" name="reset_employment_statuses" value="1" />
+        <label for="reset_employment_statuses">
+          <strong>Employment Statuses</strong>
+          <div class="text-xs text-muted">Reset to defaults: Active (1), Not Active (0), Leave of Absence (2), Terminated (3). Requires employees to also be reset.</div>
+        </label>
+      </div>
+
+      <div class="checkbox-row" style="padding: var(--s-2) 0;">
+        <input type="checkbox" id="reset_departments_and_titles" name="reset_departments_and_titles" value="1" />
+        <label for="reset_departments_and_titles">
+          <strong>Departments &amp; Job Titles</strong>
+          <div class="text-xs text-muted">Reset to defaults: 8 departments and 35 job titles. Requires employees to also be reset.</div>
+        </label>
+      </div>
+
+      <div class="checkbox-row" style="padding: var(--s-2) 0;">
+        <input type="checkbox" id="reset_states_provinces" name="reset_states_provinces" value="1" />
+        <label for="reset_states_provinces">
+          <strong>States &amp; Provinces</strong>
+          <div class="text-xs text-muted">Reset to default 80 subdivisions (US states, Canadian provinces, etc.).</div>
+        </label>
+      </div>
+
+      <div class="checkbox-row" style="padding: var(--s-2) 0;">
+        <input type="checkbox" id="reset_countries" name="reset_countries" value="1" />
+        <label for="reset_countries">
+          <strong>Countries</strong>
+          <div class="text-xs text-muted">Reset to default ~70 ISO countries. Requires states/provinces and employees to also be reset.</div>
+        </label>
+      </div>
+    </div>
+
+    <div data-reset-phrase="RESET" style="margin-top: var(--s-6);">
+      <label class="label" for="reset-confirm-input">
+        To confirm, type <span class="kbd">RESET</span> below:<span class="label__required">*</span>
+      </label>
+      <input class="input mono" id="reset-confirm-input" autocomplete="off" placeholder="Type RESET to enable the button" />
+    </div>
+
+    <div class="form-actions">
+      <a href="/ui/employees" class="btn btn--secondary">Cancel</a>
+      <button type="submit" id="reset-submit" class="btn btn--danger" disabled>Reset selected tables</button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

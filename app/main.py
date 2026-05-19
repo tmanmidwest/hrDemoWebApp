@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 import uvicorn
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -32,6 +34,7 @@ async def lifespan(_app: FastAPI) -> Any:
     settings = get_settings()
     settings.ensure_data_dir()
 
+    # Run migrations FIRST (before any DB access), then seed
     from app.db import get_session_factory
     from app.services.migrations import run_migrations
     from app.services.seed_data import seed_database
@@ -42,6 +45,7 @@ async def lifespan(_app: FastAPI) -> Any:
     with SessionLocal() as db:
         seed_database(db, settings)
 
+    # Trigger engine creation early so we fail fast on bad config
     engine = get_engine()
     log.info(
         "app_startup",
@@ -77,12 +81,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Session middleware (for UI login cookies)
+    # Secret persists across container restarts so sessions survive a redeploy.
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.get_or_create_session_secret(),
         max_age=settings.session_max_age_seconds,
         same_site="lax",
-        https_only=False,
+        https_only=False,  # set True behind an HTTPS-terminating proxy
         session_cookie="hrsot_session",
     )
 
@@ -114,6 +120,26 @@ def create_app() -> FastAPI:
     # /oauth/token (RFC 6749 - mounted at root, not under /api/v1)
     app.include_router(oauth_token_router)
 
+    # --- UI routers ---
+    from app.ui.auth_routes import router as ui_auth_router
+    from app.ui.dependencies import RedirectToLogin, redirect_to_login_handler
+    from app.ui.employee_routes import router as ui_employee_router
+    from app.ui.lookup_routes import router as ui_lookup_router
+    from app.ui.settings_routes import router as ui_settings_router
+
+    app.include_router(ui_auth_router)
+    app.include_router(ui_employee_router)
+    app.include_router(ui_lookup_router)
+    app.include_router(ui_settings_router)
+
+    # Handler that turns the UI's "you need to log in" exception into a 303
+    # redirect to the login page with ?next=<original-url>.
+    app.add_exception_handler(RedirectToLogin, redirect_to_login_handler)
+
+    # --- Static files ---
+    static_dir = Path(__file__).resolve().parent / "static"
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
     # --- Meta endpoints ---
 
     @app.get("/health", tags=["meta"])
@@ -137,15 +163,10 @@ def create_app() -> FastAPI:
             },
         )
 
-    @app.get("/", tags=["meta"])
-    async def root() -> dict[str, str]:
-        """Root index — points to docs."""
-        return {
-            "app": settings.app_name,
-            "version": settings.app_version,
-            "docs": "/docs",
-            "health": "/health",
-        }
+    @app.get("/", tags=["meta"], include_in_schema=False)
+    async def root() -> RedirectResponse:
+        """Redirect the root URL to the UI."""
+        return RedirectResponse(url="/ui/employees", status_code=307)
 
     return app
 
@@ -160,7 +181,7 @@ def main() -> None:
         "app.main:app",
         host=settings.bind_host,
         port=settings.bind_port,
-        log_config=None,
+        log_config=None,  # we configure logging ourselves
         access_log=False,
     )
 

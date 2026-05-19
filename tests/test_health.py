@@ -5,14 +5,11 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_root_returns_app_metadata(client: TestClient) -> None:
-    response = client.get("/")
-    assert response.status_code == 200
-    body = response.json()
-    assert "app" in body
-    assert "version" in body
-    assert body["docs"] == "/docs"
-    assert body["health"] == "/health"
+def test_root_redirects_to_ui(client: TestClient) -> None:
+    """The root URL redirects to the UI (which then redirects to login if unauthed)."""
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code in (302, 307)
+    assert "/ui/" in response.headers["location"]
 
 
 def test_health_endpoint_returns_ok(client: TestClient) -> None:

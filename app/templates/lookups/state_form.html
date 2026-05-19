@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set page_title = "Edit State/Province" if row else "Add State/Province" %}
+{% block breadcrumb %}
+<a href="/ui/lookups/states-provinces">States &amp; Provinces</a>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ "Edit · " ~ row.name if row else "New" }}</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{% if row %}Edit State/Province{% else %}Add State/Province{% endif %}</h1>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/lookups/states-provinces" class="btn btn--ghost">← Back</a>
+  </div>
+</div>
+
+{% if error %}<div class="inline-error">{{ error }}</div>{% endif %}
+
+<form method="post" action="{{ form_action }}" class="card" style="max-width: 560px;">
+  <div class="card__body">
+    <div class="form-row">
+      <label class="label" for="country_id">Country<span class="label__required">*</span></label>
+      <select class="select" id="country_id" name="country_id" required>
+        <option value="">— Select —</option>
+        {% for c in countries %}
+        <option value="{{ c.id }}" {% if form.country_id == c.id %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-row">
+      <label class="label" for="name">Name<span class="label__required">*</span></label>
+      <input class="input" id="name" name="name" value="{{ form.name or '' }}" required maxlength="100" />
+    </div>
+    <div class="form-row">
+      <label class="label" for="code">Subdivision Code</label>
+      <input class="input mono" id="code" name="code" value="{{ form.code or '' }}" maxlength="10" />
+      <div class="form-hint">Optional, e.g. US-IL or CA-ON.</div>
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_active" name="is_active" value="1" {% if form.is_active %}checked{% endif %} />
+      <label for="is_active">Active</label>
+    </div>
+  </div>
+  <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
+    <a href="/ui/lookups/states-provinces" class="btn btn--secondary">Cancel</a>
+    <button type="submit" class="btn btn--primary">{% if row %}Save{% else %}Create{% endif %}</button>
+  </div>
+</form>
+{% endblock %}

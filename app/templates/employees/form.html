@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% set page_title = ("Edit Employee" if employee else "Add Employee") %}
+
+{% block breadcrumb %}
+<a href="/ui/employees">Employees</a>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ "Edit · " ~ employee.employee_number if employee else "Add Employee" }}</span>
+{% endblock %}
+
+{% block main %}
+
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">
+      {% if employee %}Edit Employee{% else %}Add Employee{% endif %}
+    </h1>
+    {% if employee %}
+    <p class="page-header__subtitle">
+      <span class="mono">{{ employee.employee_number }}</span> · created {{ employee.created_at.strftime("%Y-%m-%d") }}
+    </p>
+    {% else %}
+    <p class="page-header__subtitle">Fields marked <span class="label__required">*</span> are required.</p>
+    {% endif %}
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/employees" class="btn btn--ghost">← Back</a>
+  </div>
+</div>
+
+{% if error %}<div class="inline-error">{{ error }}</div>{% endif %}
+
+<form method="post" action="{{ form_action }}" class="card" style="max-width: 920px;">
+  <div class="card__body">
+
+    <h2 class="text-sm" style="margin: 0 0 var(--s-5) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Identity</h2>
+    <div class="form-grid form-grid--2col">
+      <div>
+        <label class="label" for="employee_number">Employee Number<span class="label__required">*</span></label>
+        <input class="input mono" type="text" id="employee_number" name="employee_number"
+               value="{{ form.employee_number or '' }}" required maxlength="50" />
+      </div>
+      <div></div>
+      <div>
+        <label class="label" for="first_name">First Name<span class="label__required">*</span></label>
+        <input class="input" type="text" id="first_name" name="first_name"
+               value="{{ form.first_name or '' }}" required maxlength="100" />
+      </div>
+      <div>
+        <label class="label" for="middle_name">Middle Name</label>
+        <input class="input" type="text" id="middle_name" name="middle_name"
+               value="{{ form.middle_name or '' }}" maxlength="100" />
+      </div>
+      <div>
+        <label class="label" for="last_name">Last Name<span class="label__required">*</span></label>
+        <input class="input" type="text" id="last_name" name="last_name"
+               value="{{ form.last_name or '' }}" required maxlength="100" />
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <h2 class="text-sm" style="margin: 0 0 var(--s-5) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Address</h2>
+    <div class="form-grid form-grid--2col">
+      <div>
+        <label class="label" for="address_line_1">Address Line 1</label>
+        <input class="input" type="text" id="address_line_1" name="address_line_1"
+               value="{{ form.address_line_1 or '' }}" maxlength="200" />
+      </div>
+      <div>
+        <label class="label" for="address_line_2">Address Line 2</label>
+        <input class="input" type="text" id="address_line_2" name="address_line_2"
+               value="{{ form.address_line_2 or '' }}" maxlength="200" />
+      </div>
+      <div>
+        <label class="label" for="city">City</label>
+        <input class="input" type="text" id="city" name="city"
+               value="{{ form.city or '' }}" maxlength="100" />
+      </div>
+      <div>
+        <label class="label" for="postal_code">Postal / Zip Code</label>
+        <input class="input mono" type="text" id="postal_code" name="postal_code"
+               value="{{ form.postal_code or '' }}" maxlength="20" />
+      </div>
+      <div>
+        <label class="label" for="country_id">Country<span class="label__required">*</span></label>
+        <select class="select" id="country_id" name="country_id" required
+                hx-get="/ui/employees/_states-options"
+                hx-target="#state_province_id"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                hx-include="[name='state_province_id']">
+          <option value="">— Select country —</option>
+          {% for c in countries %}
+          <option value="{{ c.id }}" {% if form.country_id == c.id %}selected{% endif %}>
+            {{ c.name }} ({{ c.code }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label" for="state_province_id">State / Province</label>
+        <select class="select" id="state_province_id" name="state_province_id">
+          {% if not form.country_id %}
+            <option value="">— Select a country first —</option>
+          {% else %}
+            <option value="">— None —</option>
+            {% for s in states %}
+            <option value="{{ s.id }}" {% if form.state_province_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <h2 class="text-sm" style="margin: 0 0 var(--s-5) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Contact</h2>
+    <div class="form-grid form-grid--2col">
+      <div>
+        <label class="label" for="work_email">Work Email</label>
+        <input class="input" type="email" id="work_email" name="work_email"
+               value="{{ form.work_email or '' }}" maxlength="255" />
+      </div>
+      <div>
+        <label class="label" for="personal_email">Personal Email</label>
+        <input class="input" type="email" id="personal_email" name="personal_email"
+               value="{{ form.personal_email or '' }}" maxlength="255" />
+      </div>
+      <div>
+        <label class="label" for="home_phone">Home Phone</label>
+        <input class="input" type="tel" id="home_phone" name="home_phone"
+               value="{{ form.home_phone or '' }}" maxlength="50" />
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <h2 class="text-sm" style="margin: 0 0 var(--s-5) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Employment</h2>
+    <div class="form-grid form-grid--2col">
+      <div>
+        <label class="label" for="employment_status_id">Employment Status<span class="label__required">*</span></label>
+        <select class="select" id="employment_status_id" name="employment_status_id" required>
+          <option value="">— Select —</option>
+          {% for s in statuses %}
+          <option value="{{ s.id }}" {% if form.employment_status_id == s.id %}selected{% endif %}>{{ s.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label" for="cost_center">Cost Center</label>
+        <input class="input mono" type="text" id="cost_center" name="cost_center"
+               value="{{ form.cost_center or '' }}" maxlength="100" />
+      </div>
+      <div>
+        <label class="label" for="department_id">Department<span class="label__required">*</span></label>
+        <select class="select" id="department_id" name="department_id" required
+                hx-get="/ui/employees/_job-title-options"
+                hx-target="#job_title_id"
+                hx-swap="innerHTML"
+                hx-trigger="change">
+          <option value="">— Select department —</option>
+          {% for d in departments %}
+          <option value="{{ d.id }}" {% if form.department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label" for="job_title_id">Job Title<span class="label__required">*</span></label>
+        <select class="select" id="job_title_id" name="job_title_id" required>
+          {% if not form.department_id %}
+            <option value="">— Select a department first —</option>
+          {% else %}
+            <option value="">— Select —</option>
+            {% for t in job_titles %}
+            <option value="{{ t.id }}" {% if form.job_title_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+          {% endif %}
+        </select>
+      </div>
+      <div>
+        <label class="label" for="hire_date">Hire Date<span class="label__required">*</span></label>
+        <input class="input" type="date" id="hire_date" name="hire_date"
+               value="{{ form.hire_date or '' }}" required />
+      </div>
+      <div>
+        <label class="label" for="termination_date">Termination Date</label>
+        <input class="input" type="date" id="termination_date" name="termination_date"
+               value="{{ form.termination_date or '' }}" />
+      </div>
+      <div>
+        <label class="label" for="supervisor_id">
+          Supervisor{% if must_have_supervisor %}<span class="label__required">*</span>{% endif %}
+        </label>
+        <select class="select" id="supervisor_id" name="supervisor_id" {% if must_have_supervisor %}required{% endif %}>
+          {% if not must_have_supervisor %}<option value="">— None (first employee) —</option>{% else %}<option value="">— Select —</option>{% endif %}
+          {% for s in eligible_supervisors %}
+          <option value="{{ s.id }}" {% if form.supervisor_id == s.id %}selected{% endif %}>
+            {{ s.first_name }} {{ s.last_name }} ({{ s.employee_number }})
+          </option>
+          {% endfor %}
+        </select>
+        {% if not eligible_supervisors and must_have_supervisor %}
+        <div class="form-hint" style="color: var(--warning);">
+          No active employees available. Activate at least one employee first.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
+    <a href="/ui/employees" class="btn btn--secondary">Cancel</a>
+    <button type="submit" class="btn btn--primary">
+      {% if employee %}Save changes{% else %}Create employee{% endif %}
+    </button>
+  </div>
+</form>
+
+{% endblock %}

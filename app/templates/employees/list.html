@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% import "_macros.html" as M %}
+{% set page_title = "Employees" %}
+{% block breadcrumb %}<span>Employees</span>{% endblock %}
+
+{% block main %}
+
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Employees</h1>
+    <p class="page-header__subtitle">
+      {{ counts.active }} active · {{ counts.inactive }} non-active · {{ counts.archived }} archived
+    </p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/employees/new" class="btn btn--primary">+ Add Employee</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card__header">
+    <div class="flex gap-3" style="align-items: center;">
+      <div class="tabs">
+        <a href="/ui/employees?view=active" class="tabs__tab {% if view == 'active' %}is-active{% endif %}">Active</a>
+        <a href="/ui/employees?view=all" class="tabs__tab {% if view == 'all' %}is-active{% endif %}">All</a>
+        <a href="/ui/employees?view=archived" class="tabs__tab {% if view == 'archived' %}is-active{% endif %}">Archived</a>
+      </div>
+
+      <div class="col-picker" data-storage-key="hrsot.cols.employees">
+        <button class="btn btn--ghost btn--sm col-picker__trigger" type="button" aria-haspopup="true">
+          Columns ▾
+        </button>
+        <div class="col-picker__menu" role="menu">
+          {% for col in optional_cols %}
+          <label class="col-picker__option">
+            <input type="checkbox" data-col="{{ col.key }}" {% if col.default %}checked{% endif %} />
+            <span>{{ col.label }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="text-faint text-xs">
+      Showing {{ employees | length }} employee{{ '' if employees | length == 1 else 's' }}
+    </div>
+  </div>
+
+  <div class="card__body" style="padding: 0;">
+    {% if not employees %}
+    <div class="table__empty">
+      <div class="table__empty-text">No employees match this view.</div>
+      <div class="table__empty-hint">Try a different tab or <a href="/ui/employees/new">add an employee</a>.</div>
+    </div>
+    {% else %}
+    {% set qs = "view=" ~ view %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>{{ M.sort_link("employee_number", "Employee #", sort, order, "/ui/employees", qs) }}</th>
+            <th>{{ M.sort_link("last_name", "Name", sort, order, "/ui/employees", qs) }}</th>
+            <th>Status</th>
+            <th data-col="department">Department</th>
+            <th data-col="job_title">Job Title</th>
+            <th data-col="work_email">Work Email</th>
+            <th data-col="supervisor">Supervisor</th>
+            <th data-col="hire_date">{{ M.sort_link("hire_date", "Hire Date", sort, order, "/ui/employees", qs) }}</th>
+            <th data-col="country">Country</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in employees %}
+          <tr class="{% if e.is_archived %}is-archived{% endif %}">
+            <td class="mono">{{ e.employee_number }}</td>
+            <td>
+              <div>{{ e.first_name }} {{ e.last_name }}</div>
+              {% if e.is_archived %}<span class="badge badge--neutral text-xs">Archived</span>{% endif %}
+            </td>
+            <td>{{ M.status_badge(e.employment_status) }}</td>
+            <td data-col="department">{{ e.department.name }}</td>
+            <td data-col="job_title">{{ e.job_title.name }}</td>
+            <td data-col="work_email" class="text-muted">{{ e.work_email or "—" }}</td>
+            <td data-col="supervisor">
+              {% if e.supervisor %}
+                {{ e.supervisor.first_name }} {{ e.supervisor.last_name }}
+              {% else %}
+                <span class="text-faint">—</span>
+              {% endif %}
+            </td>
+            <td data-col="hire_date" class="mono text-muted">{{ e.hire_date.isoformat() }}</td>
+            <td data-col="country" class="text-muted">{{ e.country.name }}</td>
+            <td class="table__actions">
+              <a href="/ui/employees/{{ e.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
+              {% if e.is_archived %}
+                <form action="/ui/employees/{{ e.id }}/restore" method="post" style="margin:0;">
+                  <button type="submit" class="btn btn--ghost btn--sm">Restore</button>
+                </form>
+              {% else %}
+                <form action="/ui/employees/{{ e.id }}/archive" method="post" style="margin:0;"
+                      onsubmit="return confirm('Archive this employee? They will be hidden from the default list.');">
+                  <button type="submit" class="btn btn--ghost btn--sm">Archive</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

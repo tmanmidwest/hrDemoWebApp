@@ -56,6 +56,9 @@ hrsot-reset-admin = "app.scripts.reset_admin_password:main"
 where = ["."]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+"app" = ["templates/**/*.html", "static/*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

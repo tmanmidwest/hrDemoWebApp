@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% import "_macros.html" as M %}
+{% set page_title = config.title %}
+
+{% block breadcrumb %}
+<span>Lookups</span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ config.title }}</span>
+{% endblock %}
+
+{% block main %}
+
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{{ config.title }}</h1>
+    <p class="page-header__subtitle">{{ config.subtitle }}</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="{{ config.base_path }}/new" class="btn btn--primary">+ Add {{ config.singular }}</a>
+  </div>
+</div>
+
+<div class="card card--flush">
+  {% if not rows %}
+    <div class="empty-state">
+      <h3 class="empty-state__title">No {{ config.plural }} yet</h3>
+      <p class="empty-state__body">Add your first one to get started.</p>
+      <a href="{{ config.base_path }}/new" class="btn btn--primary">+ Add {{ config.singular }}</a>
+    </div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          {% for h in headers %}<th>{{ h }}</th>{% endfor %}
+          <th>Status</th>
+          <th style="text-align:right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          {% for cell in row.cells %}
+          <td {% if cell.mono %}class="mono"{% endif %}>{{ cell.value }}</td>
+          {% endfor %}
+          <td>
+            {% if row.is_system %}
+              <span class="badge badge--neutral">System</span>
+            {% else %}
+              {{ M.active_badge(row.is_active) }}
+            {% endif %}
+          </td>
+          <td class="table__actions">
+            <a href="{{ config.base_path }}/{{ row.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
+            {% if not row.is_system %}
+            <form action="{{ config.base_path }}/{{ row.id }}/delete" method="post" style="margin:0;"
+                  onsubmit="return confirm('Delete this {{ config.singular | lower }}? This cannot be undone.');">
+              <button type="submit" class="btn btn--ghost btn--sm" style="color: var(--danger);">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

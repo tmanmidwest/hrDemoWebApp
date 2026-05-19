@@ -1,0 +1,5 @@
+{# Returned by HTMX to refresh the job title <select> when department changes #}
+<option value="">— Select —</option>
+{% for t in job_titles %}
+<option value="{{ t.id }}">{{ t.name }}</option>
+{% endfor %}

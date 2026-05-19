@@ -1,0 +1,5 @@
+{# Returned by HTMX to refresh the state/province <select> when country changes #}
+<option value="">— None —</option>
+{% for s in states %}
+<option value="{{ s.id }}">{{ s.name }}</option>
+{% endfor %}
