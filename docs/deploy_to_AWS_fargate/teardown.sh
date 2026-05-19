@@ -78,6 +78,7 @@ echo -e "    • Application Load Balancer"
 echo -e "    • EFS filesystem and all stored data"
 echo -e "    • Security groups"
 echo -e "    • CloudWatch log group"
+echo -e "    • ECR repository and all container images"
 echo ""
 echo -e "  ${RED}${BOLD}Your SQLite data will be gone. This cannot be undone.${NC}"
 echo ""
@@ -162,6 +163,32 @@ if [ -n "$TASK_DEF_ARNS" ]; then
 else
   skip "No task definitions found"
 fi
+
+# ── ECR REPOSITORY ────────────────────────────────────────────────────────────
+header "ECR repository"
+
+ECR_REPO="${APP_NAME}-webapp"
+log "Deleting all images from ECR repository..."
+
+IMAGE_IDS=$(aws ecr list-images \
+  --repository-name "$ECR_REPO" \
+  --query 'imageIds[*]' \
+  --output json \
+  --region "$REGION" 2>/dev/null || echo "[]")
+
+if [ "$IMAGE_IDS" != "[]" ] && [ -n "$IMAGE_IDS" ]; then
+  aws ecr batch-delete-image \
+    --repository-name "$ECR_REPO" \
+    --image-ids "$IMAGE_IDS" \
+    --region "$REGION" >/dev/null 2>/dev/null || warn "Could not delete some images — skipping"
+fi
+
+log "Deleting ECR repository..."
+aws ecr delete-repository \
+  --repository-name "$ECR_REPO" \
+  --force \
+  --region "$REGION" >/dev/null 2>/dev/null || warn "ECR repository not found — skipping"
+success "ECR repository deleted"
 
 # ── ALB ───────────────────────────────────────────────────────────────────────
 header "Application Load Balancer"
