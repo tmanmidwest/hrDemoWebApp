@@ -1,0 +1,108 @@
+diff --git a/docs/API.md b/docs/API.md
+index 8e0c190..8cc4eae 100644
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -87,6 +87,8 @@ OAuth clients are created via the web UI under **Settings → OAuth Clients**.
+ | PATCH | `/api/v1/employees/{id}` | Partial update |
+ | POST | `/api/v1/employees/{id}/archive` | Archive (soft-delete) |
+ | POST | `/api/v1/employees/{id}/restore` | Restore from archive |
++| POST | `/api/v1/employees/{id}/terminate` | Set status to Terminated + termination date in one call |
++| POST | `/api/v1/employees/{id}/reactivate` | Reverse a termination (status back to Active, clear date) |
+ 
+ **Query parameters on list endpoint**:
+ - `include_archived=true` — include archived employees (hidden by default)
+@@ -162,6 +164,48 @@ curl -X POST -H "Authorization: Bearer hrsot_..." \
+   "http://hr.example.com/api/v1/employees"
+ ```
+ 
++## Example: IGA-friendly status writes
++
++When changing employment status from an IGA platform like Saviynt, prefer the value-based write paths over raw PATCH on `employment_status_id`. Status `value` (e.g., `1`=Active, `0`=Not Active, `2`=Leave of Absence, `3`=Terminated) is the stable identifier across deployments; primary-key IDs are not.
++
++**Change status only** (preferred over PATCH `employment_status_id`):
++
++```bash
++curl -X PATCH -H "Authorization: Bearer hrsot_..." \
++  -H "Content-Type: application/json" \
++  -d '{"employment_status_value": 2}' \
++  "http://hr.example.com/api/v1/employees/42"
++```
++
++Sending both `employment_status_id` and `employment_status_value` in the same request returns 400.
++
++**Terminate an employee** (atomic — sets status AND termination_date in one call):
++
++```bash
++# With explicit date
++curl -X POST -H "Authorization: Bearer hrsot_..." \
++  -H "Content-Type: application/json" \
++  -d '{"termination_date": "2026-06-15"}' \
++  "http://hr.example.com/api/v1/employees/42/terminate"
++
++# With defaults — uses today's date and value=3 (Terminated)
++curl -X POST -H "Authorization: Bearer hrsot_..." \
++  "http://hr.example.com/api/v1/employees/42/terminate"
++```
++
++Both fields are optional. `termination_date` defaults to today (UTC) and must be on or after the employee's `hire_date`. `employment_status_value` defaults to `3` but can be overridden if your org uses custom statuses (e.g., voluntary vs involuntary termination).
++
++**Reactivate an employee** (reverses a termination):
++
++```bash
++curl -X POST -H "Authorization: Bearer hrsot_..." \
++  "http://hr.example.com/api/v1/employees/42/reactivate"
++```
++
++Defaults to `value=1` (Active) and clears `termination_date`. Pass `{"clear_termination_date": false}` to keep the historical date for reporting.
++
++Both `/terminate` and `/reactivate` are idempotent and return 409 on archived employees — restore via `/restore` first if you need to update an archived record.
++
+ ## Example response: Employee
+ 
+ ```json
+diff --git a/docs/SAVIYNT_INTEGRATION.md b/docs/SAVIYNT_INTEGRATION.md
+index c2ea89b..5549d05 100644
+--- a/docs/SAVIYNT_INTEGRATION.md
++++ b/docs/SAVIYNT_INTEGRATION.md
+@@ -134,19 +134,23 @@ Suggested Saviynt rules:
+ 
+ ## Testing scenarios
+ 
+-The app supports manipulating data to test all the common Saviynt scenarios:
++The app supports manipulating data to test all the common Saviynt scenarios. The IGA-friendly write paths (`/terminate`, `/reactivate`, and `employment_status_value` on PATCH) are preferred over raw PATCH on `employment_status_id` — they're atomic, semantically clear, and reference status by its stable numeric value rather than DB primary key.
+ 
+ | Scenario | How to trigger |
+ |---|---|
+ | **Joiner** | Create a new employee via UI or `POST /api/v1/employees` |
+ | **Mover (dept change)** | PATCH `department_id` on an employee |
+ | **Mover (manager change)** | PATCH `supervisor_id` on an employee |
+-| **Leaver (terminated)** | PATCH `employment_status_id` to "Terminated" and set `termination_date` |
+-| **Leaver (archived)** | POST to `/api/v1/employees/{id}/archive` |
+-| **Rehire** | POST to `/api/v1/employees/{id}/restore`, then PATCH status back to Active |
+-| **Leave of Absence** | PATCH `employment_status_id` to "Leave of Absence" |
++| **Leaver (terminated)** | `POST /api/v1/employees/{id}/terminate` — sets status to Terminated AND termination_date in one atomic call. Body optional; defaults to today's date |
++| **Leaver (archived)** | `POST /api/v1/employees/{id}/archive` |
++| **Rehire** | `POST /api/v1/employees/{id}/reactivate` (status back to Active, clears termination_date). If the record was archived, `POST /restore` first |
++| **Leave of Absence** | PATCH with `{"employment_status_value": 2}` |
+ | **Status code change** | Add custom status via Settings → Employment Statuses |
+ 
++### Why prefer value-based writes
++
++Saviynt and other IGA platforms store status as a stable numeric code, not a database primary key. `employment_status.value` (`1`=Active, `0`=Not Active, `2`=Leave of Absence, `3`=Terminated) is guaranteed stable across deployments and resets; `employment_status_id` is not. All three IGA-friendly write paths above resolve status by `value`, so connector configuration only needs to know the four canonical codes — never the database IDs.
++
+ ## Resetting for clean test runs
+ 
+ Use the **Reset** page in the UI to wipe employees while keeping lookup data intact. After reset, the app reloads 1-2 sample employees (all in "Not Active" status) so the database is never completely empty — convenient for verifying the connector still authenticates and parses responses.
+diff --git a/docs/SCHEMA.md b/docs/SCHEMA.md
+index f7be566..72cd68f 100644
+--- a/docs/SCHEMA.md
++++ b/docs/SCHEMA.md
+@@ -116,7 +116,7 @@ In UI dropdowns, the supervisor list is populated from the employees table, filt
+ 
+ Display format: `{first_name} {last_name} ({employee_number})`.
+ 
+-**Seeding consideration**: Because the first employee created cannot have a supervisor (none exist yet), the seed data and the employee creation API treat `supervisor_id` as conditionally required — required for all employees except when the employees table is empty (the first employee is allowed to have a null supervisor). After the first employee exists, `supervisor_id` is required for all subsequent creates.
++**Seeding consideration**: Because the first employee created cannot have a supervisor (no eligible one exists yet), the seed data and the employee creation flow treat `supervisor_id` as conditionally required — required for all employees *except* when there is no eligible supervisor in the database. An eligible supervisor is one who is not archived and whose current employment status has `is_active_status == true`. This bootstrap exception covers both a literally empty table and the case where employees exist but none are activatable yet (e.g., only the seeded "Not Active" sample employees are present). On edit, an employee that currently has no supervisor (a legitimate state for the top of the org chart) can be saved without one; once they have a supervisor, the field becomes required.
+ 
+ ## App Users (Admin Accounts)
+ 
