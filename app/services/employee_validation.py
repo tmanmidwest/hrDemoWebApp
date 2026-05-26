@@ -61,6 +61,39 @@ def validate_employment_status(
     return s
 
 
+def resolve_employment_status_by_value(
+    db: Session, value: int
+) -> EmploymentStatus:
+    """Look up an employment status by its numeric `value` (the IGA-facing code).
+
+    Saviynt and other IGA platforms store status as a stable numeric code (e.g.,
+    1 = Active, 0 = Not Active, 3 = Terminated) — not the DB primary key, which
+    can shift across deployments. This lets the API accept that stable code on
+    writes.
+
+    The `value` column is not currently DB-unique, so this defensively rejects
+    the ambiguous "multiple statuses share this value" case rather than picking
+    one silently.
+    """
+    matches = (
+        db.query(EmploymentStatus)
+        .filter(EmploymentStatus.value == value)
+        .all()
+    )
+    if not matches:
+        raise _bad_request(
+            f"No employment status exists with value={value}. "
+            "Known seeded values: 1=Active, 0=Not Active, 2=Leave of Absence, 3=Terminated."
+        )
+    if len(matches) > 1:
+        labels = ", ".join(f"'{m.label}'" for m in matches)
+        raise _bad_request(
+            f"Ambiguous: multiple employment statuses share value={value} ({labels}). "
+            "Use employment_status_id instead, or deduplicate the statuses."
+        )
+    return matches[0]
+
+
 def validate_department(db: Session, department_id: int) -> Department:
     d = db.get(Department, department_id)
     if d is None:

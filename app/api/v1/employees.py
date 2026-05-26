@@ -14,10 +14,11 @@ Key behaviors:
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import asc, desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -27,6 +28,7 @@ from app.models import Employee, EmploymentStatus
 from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
 from app.services.auth import Principal, get_authenticated_principal
 from app.services.employee_validation import (
+    resolve_employment_status_by_value,
     validate_country_id,
     validate_department,
     validate_employment_status,
@@ -268,6 +270,24 @@ def update_employee(
 
     data = body.model_dump(exclude_unset=True)
 
+    # Resolve employment_status_value -> employment_status_id if provided.
+    # Mutually exclusive with explicit employment_status_id.
+    if "employment_status_value" in data:
+        if "employment_status_id" in data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Provide either employment_status_id OR "
+                    "employment_status_value, not both."
+                ),
+            )
+        resolved = resolve_employment_status_by_value(
+            db, data["employment_status_value"]
+        )
+        data["employment_status_id"] = resolved.id
+    # Always drop the alias field — it isn't a column on the Employee model.
+    data.pop("employment_status_value", None)
+
     # Determine effective values (incoming-or-existing) for cross-FK checks
     eff_country_id = data.get("country_id", employee.country_id)
     eff_state_id = data.get(
@@ -384,4 +404,181 @@ def restore_employee(
             "employee_restored",
             extra={"employee_id": employee_id, "by": principal.identifier},
         )
+    return employee
+
+# ---------------------------------------------------------------------------
+# Terminate / Reactivate (IGA-friendly lifecycle operations)
+# ---------------------------------------------------------------------------
+#
+# These are atomic, single-call versions of "change status + set termination
+# date" that IGA platforms like Saviynt prefer to call. They avoid the
+# coupled-write problem where a connector forgets to set termination_date
+# alongside a Terminated status, or forgets to clear it on reactivation.
+#
+# They are NOT the same as /archive and /restore:
+#   - archive/restore = soft-delete the row (hide from default lists)
+#   - terminate/reactivate = employment lifecycle (still a real employee,
+#     just no longer working here)
+# An employee can be terminated without being archived (typical pattern: keep
+# the record visible for reporting/access reviews for some retention window,
+# then archive later).
+
+
+# Default value codes — must match the seeded statuses in services/seed_data.py
+DEFAULT_TERMINATED_VALUE = 3   # "Terminated"
+DEFAULT_ACTIVE_VALUE = 1       # "Active"
+
+
+class TerminateRequest(BaseModel):
+    """Body for POST /employees/{id}/terminate."""
+
+    termination_date: date | None = Field(
+        default=None,
+        description=(
+            "Effective termination date. Defaults to today (UTC) if omitted. "
+            "Must be on or after the employee's hire_date."
+        ),
+    )
+    employment_status_value: int = Field(
+        default=DEFAULT_TERMINATED_VALUE,
+        description=(
+            "Status value to set. Defaults to 3 (Terminated). Override if your "
+            "org distinguishes e.g. voluntary vs involuntary termination via "
+            "custom statuses."
+        ),
+    )
+
+
+class ReactivateRequest(BaseModel):
+    """Body for POST /employees/{id}/reactivate."""
+
+    employment_status_value: int = Field(
+        default=DEFAULT_ACTIVE_VALUE,
+        description=(
+            "Status value to set on reactivation. Defaults to 1 (Active)."
+        ),
+    )
+    clear_termination_date: bool = Field(
+        default=True,
+        description=(
+            "If true (default), clears termination_date. Set false if you want "
+            "to keep the historical termination date for reporting."
+        ),
+    )
+
+
+@router.post("/{employee_id}/terminate", response_model=EmployeeOut)
+def terminate_employee(
+    employee_id: int,
+    body: TerminateRequest | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_authenticated_principal),
+) -> Employee:
+    """Mark an employee as terminated.
+
+    Atomic version of "set employment_status to Terminated AND set
+    termination_date" — intended for IGA platforms like Saviynt to call as a
+    single operation.
+
+    Idempotent: calling on an already-terminated employee returns 200 with the
+    current state unchanged (except termination_date, which will update if a
+    new one is supplied).
+
+    Refuses on archived employees — archive and unarchive those separately if
+    you really need to update them.
+    """
+    if body is None:
+        body = TerminateRequest()
+
+    employee = db.get(Employee, employee_id)
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found."
+        )
+    if employee.is_archived:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot terminate an archived employee. Restore the record "
+                "first via /restore if you need to update it."
+            ),
+        )
+
+    target_status = resolve_employment_status_by_value(
+        db, body.employment_status_value
+    )
+    effective_term_date = body.termination_date or datetime.now(UTC).date()
+    if effective_term_date < employee.hire_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"termination_date ({effective_term_date}) must be on or after "
+                f"hire_date ({employee.hire_date})."
+            ),
+        )
+
+    employee.employment_status_id = target_status.id
+    employee.termination_date = effective_term_date
+    db.commit()
+    db.refresh(employee)
+    log.info(
+        "employee_terminated",
+        extra={
+            "employee_id": employee_id,
+            "status_value": body.employment_status_value,
+            "termination_date": effective_term_date.isoformat(),
+            "by": principal.identifier,
+        },
+    )
+    return employee
+
+
+@router.post("/{employee_id}/reactivate", response_model=EmployeeOut)
+def reactivate_employee(
+    employee_id: int,
+    body: ReactivateRequest | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_authenticated_principal),
+) -> Employee:
+    """Reverse a termination — set status back to Active and clear the
+    termination date.
+
+    Idempotent: calling on an already-active employee returns 200 with the
+    current state.
+
+    Refuses on archived employees for the same reason as /terminate.
+    """
+    if body is None:
+        body = ReactivateRequest()
+
+    employee = db.get(Employee, employee_id)
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found."
+        )
+    if employee.is_archived:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Cannot reactivate an archived employee. Restore the record "
+                "first via /restore if you need to update it."
+            ),
+        )
+
+    target_status = resolve_employment_status_by_value(
+        db, body.employment_status_value
+    )
+    employee.employment_status_id = target_status.id
+    if body.clear_termination_date:
+        employee.termination_date = None
+    db.commit()
+    db.refresh(employee)
+    log.info(
+        "employee_reactivated",
+        extra={
+            "employee_id": employee_id,
+            "status_value": body.employment_status_value,
+            "by": principal.identifier,
+        },
+    )
     return employee

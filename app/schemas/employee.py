@@ -147,7 +147,14 @@ class EmployeeCreate(BaseModel):
 
 
 class EmployeeUpdate(BaseModel):
-    """PATCH payload — every field optional."""
+    """PATCH payload — every field optional.
+
+    Status can be set via either `employment_status_id` (DB primary key) or
+    `employment_status_value` (the stable IGA-facing numeric code, e.g. 1=Active,
+    0=Not Active, 3=Terminated). The `_value` form is preferred for IGA writes
+    because PKs can shift across deployments while values are stable.
+    Sending both in the same request is a 400.
+    """
 
     employee_number: str | None = Field(default=None, min_length=1, max_length=50)
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
@@ -167,6 +174,14 @@ class EmployeeUpdate(BaseModel):
 
     cost_center: str | None = Field(default=None, max_length=100)
     employment_status_id: int | None = None
+    employment_status_value: int | None = Field(
+        default=None,
+        description=(
+            "IGA-friendly alternative to employment_status_id. Resolves a "
+            "status by its stable numeric value (e.g. 1=Active, 0=Not Active, "
+            "3=Terminated). Mutually exclusive with employment_status_id."
+        ),
+    )
     department_id: int | None = None
     job_title_id: int | None = None
     hire_date: date | None = None
