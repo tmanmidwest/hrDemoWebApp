@@ -134,18 +134,22 @@ Suggested Saviynt rules:
 
 ## Testing scenarios
 
-The app supports manipulating data to test all the common Saviynt scenarios:
+The app supports manipulating data to test all the common Saviynt scenarios. The IGA-friendly write paths (`/terminate`, `/reactivate`, and `employment_status_value` on PATCH) are preferred over raw PATCH on `employment_status_id` — they're atomic, semantically clear, and reference status by its stable numeric value rather than DB primary key.
 
 | Scenario | How to trigger |
 |---|---|
 | **Joiner** | Create a new employee via UI or `POST /api/v1/employees` |
 | **Mover (dept change)** | PATCH `department_id` on an employee |
 | **Mover (manager change)** | PATCH `supervisor_id` on an employee |
-| **Leaver (terminated)** | PATCH `employment_status_id` to "Terminated" and set `termination_date` |
-| **Leaver (archived)** | POST to `/api/v1/employees/{id}/archive` |
-| **Rehire** | POST to `/api/v1/employees/{id}/restore`, then PATCH status back to Active |
-| **Leave of Absence** | PATCH `employment_status_id` to "Leave of Absence" |
+| **Leaver (terminated)** | `POST /api/v1/employees/{id}/terminate` — sets status to Terminated AND termination_date in one atomic call. Body optional; defaults to today's date |
+| **Leaver (archived)** | `POST /api/v1/employees/{id}/archive` |
+| **Rehire** | `POST /api/v1/employees/{id}/reactivate` (status back to Active, clears termination_date). If the record was archived, `POST /restore` first |
+| **Leave of Absence** | PATCH with `{"employment_status_value": 2}` |
 | **Status code change** | Add custom status via Settings → Employment Statuses |
+
+### Why prefer value-based writes
+
+Saviynt and other IGA platforms store status as a stable numeric code, not a database primary key. `employment_status.value` (`1`=Active, `0`=Not Active, `2`=Leave of Absence, `3`=Terminated) is guaranteed stable across deployments and resets; `employment_status_id` is not. All three IGA-friendly write paths above resolve status by `value`, so connector configuration only needs to know the four canonical codes — never the database IDs.
 
 ## Resetting for clean test runs
 

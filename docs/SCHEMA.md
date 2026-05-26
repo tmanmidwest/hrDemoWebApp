@@ -116,7 +116,7 @@ In UI dropdowns, the supervisor list is populated from the employees table, filt
 
 Display format: `{first_name} {last_name} ({employee_number})`.
 
-**Seeding consideration**: Because the first employee created cannot have a supervisor (none exist yet), the seed data and the employee creation API treat `supervisor_id` as conditionally required — required for all employees except when the employees table is empty (the first employee is allowed to have a null supervisor). After the first employee exists, `supervisor_id` is required for all subsequent creates.
+**Seeding consideration**: Because the first employee created cannot have a supervisor (no eligible one exists yet), the seed data and the employee creation flow treat `supervisor_id` as conditionally required — required for all employees *except* when there is no eligible supervisor in the database. An eligible supervisor is one who is not archived and whose current employment status has `is_active_status == true`. This bootstrap exception covers both a literally empty table and the case where employees exist but none are activatable yet (e.g., only the seeded "Not Active" sample employees are present). On edit, an employee that currently has no supervisor (a legitimate state for the top of the org chart) can be saved without one; once they have a supervisor, the field becomes required.
 
 ## App Users (Admin Accounts)
 

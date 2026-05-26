@@ -87,6 +87,8 @@ OAuth clients are created via the web UI under **Settings → OAuth Clients**.
 | PATCH | `/api/v1/employees/{id}` | Partial update |
 | POST | `/api/v1/employees/{id}/archive` | Archive (soft-delete) |
 | POST | `/api/v1/employees/{id}/restore` | Restore from archive |
+| POST | `/api/v1/employees/{id}/terminate` | Set status to Terminated + termination date in one call |
+| POST | `/api/v1/employees/{id}/reactivate` | Reverse a termination (status back to Active, clear date) |
 
 **Query parameters on list endpoint**:
 - `include_archived=true` — include archived employees (hidden by default)
@@ -161,6 +163,48 @@ curl -X POST -H "Authorization: Bearer hrsot_..." \
   }' \
   "http://hr.example.com/api/v1/employees"
 ```
+
+## Example: IGA-friendly status writes
+
+When changing employment status from an IGA platform like Saviynt, prefer the value-based write paths over raw PATCH on `employment_status_id`. Status `value` (e.g., `1`=Active, `0`=Not Active, `2`=Leave of Absence, `3`=Terminated) is the stable identifier across deployments; primary-key IDs are not.
+
+**Change status only** (preferred over PATCH `employment_status_id`):
+
+```bash
+curl -X PATCH -H "Authorization: Bearer hrsot_..." \
+  -H "Content-Type: application/json" \
+  -d '{"employment_status_value": 2}' \
+  "http://hr.example.com/api/v1/employees/42"
+```
+
+Sending both `employment_status_id` and `employment_status_value` in the same request returns 400.
+
+**Terminate an employee** (atomic — sets status AND termination_date in one call):
+
+```bash
+# With explicit date
+curl -X POST -H "Authorization: Bearer hrsot_..." \
+  -H "Content-Type: application/json" \
+  -d '{"termination_date": "2026-06-15"}' \
+  "http://hr.example.com/api/v1/employees/42/terminate"
+
+# With defaults — uses today's date and value=3 (Terminated)
+curl -X POST -H "Authorization: Bearer hrsot_..." \
+  "http://hr.example.com/api/v1/employees/42/terminate"
+```
+
+Both fields are optional. `termination_date` defaults to today (UTC) and must be on or after the employee's `hire_date`. `employment_status_value` defaults to `3` but can be overridden if your org uses custom statuses (e.g., voluntary vs involuntary termination).
+
+**Reactivate an employee** (reverses a termination):
+
+```bash
+curl -X POST -H "Authorization: Bearer hrsot_..." \
+  "http://hr.example.com/api/v1/employees/42/reactivate"
+```
+
+Defaults to `value=1` (Active) and clears `termination_date`. Pass `{"clear_termination_date": false}` to keep the historical date for reporting.
+
+Both `/terminate` and `/reactivate` are idempotent and return 409 on archived employees — restore via `/restore` first if you need to update an archived record.
 
 ## Example response: Employee
 
