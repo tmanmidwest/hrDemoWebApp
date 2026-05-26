@@ -52,3 +52,4 @@ Thumbs.db
 # Logs
 *.log
 logs/
+docs/deploy_to_AWS_fargate/.hr-demo-state
