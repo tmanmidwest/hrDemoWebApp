@@ -200,8 +200,28 @@ def _form_dropdown_data(
     }
 
 
-def _employees_table_empty(db: Session) -> bool:
-    return db.query(Employee.id).first() is None
+def _no_eligible_supervisors(db: Session) -> bool:
+    """True if no employee is currently eligible to be a supervisor.
+
+    An eligible supervisor is one who is not archived and whose current
+    employment status is_active_status == True. We use this — rather than a
+    simple "is the employees table empty?" check — so that the bootstrap case
+    also covers DBs where employees exist but none are activatable yet (e.g.,
+    only the seeded "Not Active" sample employees are present). Without this,
+    the UI deadlocks: the supervisor field is required, but no row can be
+    chosen, and the seeded rows can't be activated either because editing
+    them also demands a supervisor.
+    """
+    return (
+        db.query(Employee.id)
+        .join(Employee.employment_status)
+        .filter(
+            Employee.is_archived.is_(False),
+            EmploymentStatus.is_active_status.is_(True),
+        )
+        .first()
+        is None
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -224,7 +244,7 @@ def show_new_form(
         employee=None,
         form={},  # empty form
         form_action="/ui/employees/new",
-        must_have_supervisor=not _employees_table_empty(db),
+        must_have_supervisor=not _no_eligible_supervisors(db),
         **dropdowns,
     )
 
@@ -285,7 +305,7 @@ def show_edit_form(
         employee=employee,
         form=form_data,
         form_action=f"/ui/employees/{employee.id}/edit",
-        must_have_supervisor=True,  # Editing always requires a supervisor
+        must_have_supervisor=employee.supervisor_id is not None,  # Bootstrap rows (e.g., the first employee) legitimately have no supervisor; preserve that.
         **dropdowns,
     )
 
@@ -448,7 +468,7 @@ async def create_employee(
     user: AppUser = Depends(require_ui_user),
 ) -> Response:
     data = await _parse_employee_form(request)
-    must_have_supervisor = not _employees_table_empty(db)
+    must_have_supervisor = not _no_eligible_supervisors(db)
 
     try:
         if data["country_id"] is None:
@@ -533,6 +553,11 @@ async def update_employee(
 
     data = await _parse_employee_form(request)
 
+    # An employee that legitimately has no supervisor today (e.g., the bootstrap
+    # first employee) can keep saving with no supervisor. Once they have one,
+    # they must keep one.
+    must_have_supervisor = employee.supervisor_id is not None
+
     try:
         if data["country_id"] is None:
             raise ValueError("Country is required.")
@@ -548,14 +573,15 @@ async def update_employee(
         )
         if data["termination_date"] is not None and data["termination_date"] < data["hire_date"]:  # type: ignore[operator]
             raise ValueError("Termination date must be on or after hire date.")
-        if data["supervisor_id"] is None:
+        if must_have_supervisor and data["supervisor_id"] is None:
             raise ValueError("Supervisor is required.")
-        validate_supervisor(
-            db, data["supervisor_id"], excluding_employee_id=employee_id  # type: ignore[arg-type]
-        )
+        if data["supervisor_id"] is not None:
+            validate_supervisor(
+                db, data["supervisor_id"], excluding_employee_id=employee_id  # type: ignore[arg-type]
+            )
     except (HTTPException, ValueError) as exc:
         msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        return _render_form_with_error(request, user, db, employee, data, msg, True)
+        return _render_form_with_error(request, user, db, employee, data, msg, must_have_supervisor)
 
     for field, value in data.items():
         setattr(employee, field, value)
@@ -572,10 +598,10 @@ async def update_employee(
                 employee,
                 data,
                 "That employee number is in use by another employee.",
-                True,
+                must_have_supervisor,
             )
         return _render_form_with_error(
-            request, user, db, employee, data, f"Database error: {exc.orig}", True
+            request, user, db, employee, data, f"Database error: {exc.orig}", must_have_supervisor
         )
 
     log.info("ui_employee_updated", extra={"employee_id": employee.id, "by": user.username})
