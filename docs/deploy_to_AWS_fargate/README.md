@@ -18,7 +18,7 @@ Each person runs these scripts against their own AWS account — fully isolated 
 
 ```bash
 # Make all scripts executable (one time only)
-chmod +x setup.sh deploy.sh manage.sh update.sh teardown.sh fix-image.sh
+chmod +x setup.sh deploy.sh manage.sh update.sh teardown.sh fix-image.sh restore-state.sh
 
 # 1. Check all prerequisites are in place
 ./setup.sh
@@ -59,6 +59,33 @@ rebuilds the image and redeploys automatically.
 
 ---
 
+## Managing from a second machine
+
+The management scripts (`manage.sh`, `update.sh`, `teardown.sh`) read a local
+`.hr-demo-state` file that `deploy.sh` writes on the machine you deployed from.
+It holds the IDs of your AWS resources but is **not** synced anywhere, so a
+second laptop won't have it — you'll see `No state file found` if you try to
+manage from there.
+
+To manage an existing deployment from another machine, regenerate the file by
+rediscovering your resources from AWS (this creates nothing — it's read-only):
+
+```bash
+chmod +x restore-state.sh
+./restore-state.sh             # uses your default AWS region
+./restore-state.sh us-west-2   # or pass the region you deployed to
+```
+
+Once it finishes you can run `./manage.sh status` (and the rest) normally.
+The file contains only AWS resource IDs — no secrets — so copying it between
+your own machines is also fine if you prefer.
+
+> Note: this assumes one `hr-demo` deployment per AWS account, which matches the
+> isolation model below. The lookups are by resource name, so running two in the
+> same account and region is not supported.
+
+---
+
 ## Remove everything
 
 ```bash
@@ -76,6 +103,10 @@ Every person runs `deploy.sh` against their own AWS account. Each deployment cre
 - Its own ECR repository (image built from the same public GitHub source)
 - Its own ECS cluster, EFS filesystem, ALB, and security groups
 - Its own `.hr-demo-state` file tracking all resource IDs
+
+This state file lives only on the machine you deployed from. To operate the same
+deployment from another machine, run `./restore-state.sh` there to rebuild it
+(see *Managing from a second machine*).
 
 Nobody shares infrastructure. Tearing down your instance has no effect on anyone else's.
 
@@ -100,5 +131,6 @@ Change the password after first login via **Settings → Admin Users → Change 
 | `deploy.sh` | Full deployment from scratch (~10 min) |
 | `update.sh` | Rebuild and redeploy from latest GitHub source |
 | `manage.sh` | Stop, start, restart, logs, status |
+| `restore-state.sh` | Rebuild `.hr-demo-state` from AWS (e.g. on a second machine) |
 | `teardown.sh` | Delete all AWS resources |
 | `fix-image.sh` | One-time fix if the image fails to pull |
