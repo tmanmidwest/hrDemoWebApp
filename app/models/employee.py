@@ -22,6 +22,7 @@ from app.models.country import Country
 from app.models.department import Department
 from app.models.employment_status import EmploymentStatus
 from app.models.job_title import JobTitle
+from app.models.location import Location
 from app.models.state_province import StateProvince
 
 
@@ -76,6 +77,10 @@ class Employee(Base, TimestampMixin):
     job_title_id: Mapped[int] = mapped_column(
         ForeignKey("job_titles.id"), nullable=False
     )
+    # Optional — location is available but not required.
+    location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("locations.id"), nullable=True, index=True
+    )
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
     termination_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -102,6 +107,7 @@ class Employee(Base, TimestampMixin):
     )
     department: Mapped[Department] = relationship("Department", lazy="joined")
     job_title: Mapped[JobTitle] = relationship("JobTitle", lazy="joined")
+    location: Mapped[Location | None] = relationship("Location", lazy="joined")
 
     # Self-referential — the supervisor is another Employee.
     # remote_side tells SQLAlchemy which side is the "one" in the many-to-one.

@@ -40,6 +40,7 @@ The following lookup tables are managed via UI and exposed via REST:
 - **Employment Statuses** — label, numeric value, `is_active_status` boolean flag, `is_system` flag (protects core statuses from deletion/value changes)
 - **Departments** — display name, 8 seeded
 - **Job Titles** — display name, linked to a department, 35 seeded
+- **Locations** — display name, optional employee attribute, 8 seeded
 - **Supervisor** — self-referential FK on employees table (rather than a separate managers table)
 
 ### Reference protection

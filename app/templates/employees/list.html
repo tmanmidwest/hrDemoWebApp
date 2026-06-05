@@ -66,6 +66,7 @@
             <th data-col="supervisor">Supervisor</th>
             <th data-col="hire_date">{{ M.sort_link("hire_date", "Hire Date", sort, order, "/ui/employees", qs) }}</th>
             <th data-col="country">Country</th>
+            <th data-col="location">Location</th>
             <th style="text-align:right;">Actions</th>
           </tr>
         </thead>
@@ -90,6 +91,7 @@
             </td>
             <td data-col="hire_date" class="mono text-muted">{{ e.hire_date.isoformat() }}</td>
             <td data-col="country" class="text-muted">{{ e.country.name }}</td>
+            <td data-col="location" class="text-muted">{{ e.location.name if e.location else "—" }}</td>
             <td class="table__actions">
               <a href="/ui/employees/{{ e.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
               {% if e.is_archived %}

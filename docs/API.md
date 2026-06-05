@@ -109,6 +109,7 @@ All lookup tables support the same five operations.
 | Employment Statuses | `/api/v1/employment-statuses` |
 | Departments | `/api/v1/departments` |
 | Job Titles | `/api/v1/job-titles` |
+| Locations | `/api/v1/locations` |
 
 For each: `GET /` (list), `GET /{id}`, `POST /`, `PUT /{id}`, `DELETE /{id}`.
 
@@ -158,11 +159,14 @@ curl -X POST -H "Authorization: Bearer hrsot_..." \
     "employment_status_id": 1,
     "department_id": 3,
     "job_title_id": 12,
+    "location_id": 2,
     "supervisor_id": 4,
     "hire_date": "2026-05-18"
   }' \
   "http://hr.example.com/api/v1/employees"
 ```
+
+`location_id` is optional — omit it or send `null` to leave an employee with no location. It can be set or cleared later via `PATCH /api/v1/employees/{id}` with `{"location_id": <id>}` or `{"location_id": null}`.
 
 ## Example: IGA-friendly status writes
 
@@ -228,6 +232,7 @@ Both `/terminate` and `/reactivate` are idempotent and return 409 on archived em
   "employment_status": {"id": 1, "label": "Active", "value": 1, "is_active_status": true},
   "department": {"id": 3, "name": "Engineering"},
   "job_title": {"id": 12, "name": "Senior Engineer"},
+  "location": {"id": 2, "name": "New York Office"},
   "supervisor": {"id": 4, "employee_number": "E10001", "first_name": "Sam", "last_name": "Roberts"},
   "hire_date": "2026-05-18",
   "termination_date": null,

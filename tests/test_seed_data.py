@@ -14,6 +14,7 @@ from app.models import (
     Employee,
     EmploymentStatus,
     JobTitle,
+    Location,
     StateProvince,
 )
 from app.services.migrations import run_migrations
@@ -21,6 +22,7 @@ from app.services.passwords import verify_password
 from app.services.seed_data import (
     reset_admin_password,
     reset_employees,
+    reset_locations,
     seed_database,
 )
 
@@ -145,6 +147,7 @@ def test_seed_is_idempotent(seeded_db: None) -> None:
             "statuses": db.scalar(select(func.count()).select_from(EmploymentStatus)),
             "depts": db.scalar(select(func.count()).select_from(Department)),
             "titles": db.scalar(select(func.count()).select_from(JobTitle)),
+            "locations": db.scalar(select(func.count()).select_from(Location)),
             "employees": db.scalar(select(func.count()).select_from(Employee)),
             "users": db.scalar(select(func.count()).select_from(AppUser)),
         }
@@ -159,6 +162,7 @@ def test_seed_is_idempotent(seeded_db: None) -> None:
             "statuses": db.scalar(select(func.count()).select_from(EmploymentStatus)),
             "depts": db.scalar(select(func.count()).select_from(Department)),
             "titles": db.scalar(select(func.count()).select_from(JobTitle)),
+            "locations": db.scalar(select(func.count()).select_from(Location)),
             "employees": db.scalar(select(func.count()).select_from(Employee)),
             "users": db.scalar(select(func.count()).select_from(AppUser)),
         }
@@ -245,3 +249,37 @@ def test_reset_admin_password_does_not_touch_other_admins(seeded_db: None) -> No
         assert other is not None
         assert other.password_hash == other_hash_before
         assert verify_password("their-own-password", other.password_hash)
+
+
+def test_seed_populates_locations(seeded_db: None) -> None:
+    SessionLocal = get_session_factory()
+    with SessionLocal() as db:
+        count = db.scalar(select(func.count()).select_from(Location))
+        assert count == 8
+        names = {loc.name for loc in db.scalars(select(Location)).all()}
+        assert "Chicago HQ" in names
+
+
+def test_reset_locations_clears_employee_refs_and_reseeds(seeded_db: None) -> None:
+    SessionLocal = get_session_factory()
+
+    # Assign a location to a sample employee
+    with SessionLocal() as db:
+        loc = db.scalar(select(Location).where(Location.name == "Chicago HQ"))
+        emp = db.scalars(select(Employee)).first()
+        assert loc is not None and emp is not None
+        emp.location_id = loc.id
+        db.commit()
+        emp_id = emp.id
+
+    with SessionLocal() as db:
+        inserted = reset_locations(db)
+        assert inserted == 8
+
+    with SessionLocal() as db:
+        # Employee's location reference was nulled, employee still exists
+        emp = db.get(Employee, emp_id)
+        assert emp is not None
+        assert emp.location_id is None
+        count = db.scalar(select(func.count()).select_from(Location))
+        assert count == 8

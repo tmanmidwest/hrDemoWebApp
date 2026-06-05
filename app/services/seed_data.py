@@ -24,6 +24,7 @@ from app.models import (
     Employee,
     EmploymentStatus,
     JobTitle,
+    Location,
     StateProvince,
 )
 from app.services._seed_countries import COUNTRIES
@@ -107,6 +108,23 @@ DEFAULT_DEPARTMENTS: dict[str, list[str]] = {
 
 
 # ---------------------------------------------------------------------------
+# Default locations
+# ---------------------------------------------------------------------------
+
+# Optional employee attribute. A simple flat list of office/site names.
+DEFAULT_LOCATIONS: list[str] = [
+    "Chicago HQ",
+    "New York Office",
+    "San Francisco Office",
+    "Austin Office",
+    "London Office",
+    "Toronto Office",
+    "Remote - US",
+    "Remote - International",
+]
+
+
+# ---------------------------------------------------------------------------
 # Top-level orchestration
 # ---------------------------------------------------------------------------
 
@@ -122,6 +140,7 @@ def seed_database(db: Session, settings: Settings | None = None) -> None:
     seed_states_provinces(db)
     seed_employment_statuses(db)
     seed_departments_and_titles(db)
+    seed_locations(db)
     seed_admin_user(db, settings)
     seed_sample_employees(db)
 
@@ -146,6 +165,7 @@ def seed_database(db: Session, settings: Settings | None = None) -> None:
             or 0,
             "departments": db.scalar(select(func.count()).select_from(Department)) or 0,
             "job_titles": db.scalar(select(func.count()).select_from(JobTitle)) or 0,
+            "locations": db.scalar(select(func.count()).select_from(Location)) or 0,
             "employees": db.scalar(select(func.count()).select_from(Employee)) or 0,
             "app_users": db.scalar(select(func.count()).select_from(AppUser)) or 0,
             "api_keys": db.scalar(select(func.count()).select_from(ApiKey)) or 0,
@@ -263,6 +283,20 @@ def seed_departments_and_titles(db: Session) -> tuple[int, int]:
             extra={"departments_inserted": depts_inserted, "titles_inserted": titles_inserted},
         )
     return depts_inserted, titles_inserted
+
+
+def seed_locations(db: Session) -> int:
+    """Insert any missing locations. Returns number of rows inserted."""
+    existing_names = {row[0] for row in db.execute(select(Location.name)).all()}
+    inserted = 0
+    for name in DEFAULT_LOCATIONS:
+        if name not in existing_names:
+            db.add(Location(name=name, is_active=True))
+            inserted += 1
+    if inserted:
+        db.flush()
+        log.info("seeded_locations", extra={"inserted": inserted})
+    return inserted
 
 
 def seed_admin_user(db: Session, settings: Settings) -> bool:
@@ -469,6 +503,26 @@ def reset_departments_and_titles(db: Session) -> tuple[int, int]:
     result = seed_departments_and_titles(db)
     db.commit()
     return result
+
+
+def reset_locations(db: Session) -> int:
+    """Delete all locations and reseed.
+
+    Because employees reference locations via an OPTIONAL FK, we null out any
+    employee references first. This lets locations be reset on their own,
+    without forcing a full employee reset.
+
+    Returns the number of locations inserted after reset.
+    """
+    db.query(Employee).filter(Employee.location_id.isnot(None)).update(
+        {Employee.location_id: None}
+    )
+    db.flush()
+    db.query(Location).delete()
+    db.flush()
+    inserted = seed_locations(db)
+    db.commit()
+    return inserted
 
 
 def reset_admin_password(db: Session, settings: Settings | None = None) -> bool:

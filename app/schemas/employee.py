@@ -49,6 +49,12 @@ class EmployeeJobTitleRef(BaseModel):
     name: str
 
 
+class EmployeeLocationRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
 class EmployeeSupervisorRef(BaseModel):
     """Minimal employee reference for the supervisor field."""
 
@@ -96,6 +102,7 @@ class EmployeeOut(BaseModel):
     employment_status: EmployeeStatusRef
     department: EmployeeDepartmentRef
     job_title: EmployeeJobTitleRef
+    location: EmployeeLocationRef | None
     hire_date: date
     termination_date: date | None
     supervisor: EmployeeSupervisorRef | None
@@ -138,6 +145,7 @@ class EmployeeCreate(BaseModel):
     cost_center: str | None = Field(default=None, max_length=100)
     termination_date: date | None = None
     supervisor_id: int | None = None  # Required only if other employees exist
+    location_id: int | None = None  # Optional — location is not required
 
     @model_validator(mode="after")
     def _validate_dates(self) -> EmployeeCreate:
@@ -187,3 +195,4 @@ class EmployeeUpdate(BaseModel):
     hire_date: date | None = None
     termination_date: date | None = None
     supervisor_id: int | None = None
+    location_id: int | None = None

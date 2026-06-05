@@ -46,7 +46,7 @@ A single form template handles both create and edit. Sections:
 1. **Identity** — employee number, first/middle/last name
 2. **Address** — street address, city, country, state/province, postal code
 3. **Contact** — work email, personal email, home phone
-4. **Employment** — employment status, cost center, department, job title, hire date, termination date, supervisor
+4. **Employment** — employment status, cost center, department, job title, location (optional), hire date, termination date, supervisor
 
 Two HTMX-powered dependent dropdowns:
 
@@ -59,13 +59,14 @@ Validation errors (invalid FK combinations, duplicate employee number, etc.) re-
 
 ### Lookup Management (`/ui/lookups/...`)
 
-Five lookup pages, all following the same pattern:
+Six lookup pages, all following the same pattern:
 
 - **Countries** (`/ui/lookups/countries`)
 - **States/Provinces** (`/ui/lookups/states-provinces`)
 - **Employment Statuses** (`/ui/lookups/employment-statuses`)
 - **Departments** (`/ui/lookups/departments`)
 - **Job Titles** (`/ui/lookups/job-titles`)
+- **Locations** (`/ui/lookups/locations`)
 
 Each page has:
 
@@ -115,7 +116,7 @@ To use these credentials, the consuming system calls `POST /oauth/token` with `g
 
 Destructive operation for returning the demo to a clean state. The page is designed to make accidental clicks impossible:
 
-1. **Checkboxes per table**: Employees, Employment Statuses, Departments & Job Titles, States/Provinces, Countries. Each checkbox has a description explaining what gets wiped and what gets re-seeded.
+1. **Checkboxes per table**: Employees, Employment Statuses, Departments & Job Titles, Locations, States/Provinces, Countries. Each checkbox has a description explaining what gets wiped and what gets re-seeded.
 2. **Dependency validation**: Resetting any table that other tables reference requires the dependent tables to also be selected. For example, you can't reset Countries without also resetting States and Employees, because they'd be left with dangling FK references. The page enforces this server-side and shows a clear flash error if you submit an invalid combination.
 3. **Typed-phrase confirm**: Below the checkboxes is an input field. You must type the word `RESET` (exactly) before the destructive button is enabled. JavaScript watches the field and toggles the button's `disabled` state.
 4. **Action**: Submitting the form wipes the selected tables (in the correct order to respect FK constraints) and re-seeds them with their default data. Employees are re-seeded as two sample employees in "Not Active" status.

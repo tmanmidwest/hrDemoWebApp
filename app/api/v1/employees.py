@@ -33,6 +33,7 @@ from app.services.employee_validation import (
     validate_department,
     validate_employment_status,
     validate_job_title_belongs_to_department,
+    validate_location,
     validate_state_belongs_to_country,
     validate_supervisor,
 )
@@ -206,6 +207,8 @@ def create_employee(
     validate_job_title_belongs_to_department(
         db, body.job_title_id, body.department_id
     )
+    if body.location_id is not None:
+        validate_location(db, body.location_id)
 
     # supervisor_id is required unless the employees table is empty
     if body.supervisor_id is None:
@@ -297,6 +300,7 @@ def update_employee(
     eff_dept_id = data.get("department_id", employee.department_id)
     eff_title_id = data.get("job_title_id", employee.job_title_id)
     eff_status_id = data.get("employment_status_id", employee.employment_status_id)
+    eff_location_id = data.get("location_id", employee.location_id)
     eff_hire = data.get("hire_date", employee.hire_date)
     eff_term = data.get("termination_date", employee.termination_date)
 
@@ -312,6 +316,8 @@ def update_employee(
         validate_department(db, eff_dept_id)
     if "department_id" in data or "job_title_id" in data:
         validate_job_title_belongs_to_department(db, eff_title_id, eff_dept_id)
+    if "location_id" in data and eff_location_id is not None:
+        validate_location(db, eff_location_id)
     if "supervisor_id" in data and data["supervisor_id"] is not None:
         validate_supervisor(db, data["supervisor_id"], excluding_employee_id=employee_id)
     if eff_term is not None and eff_term < eff_hire:

@@ -419,6 +419,7 @@ def do_reset(
     reset_employees: str | None = Form(None),
     reset_employment_statuses: str | None = Form(None),
     reset_departments_and_titles: str | None = Form(None),
+    reset_locations: str | None = Form(None),
     reset_states_provinces: str | None = Form(None),
     reset_countries: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -429,6 +430,7 @@ def do_reset(
     do_employees = bool(reset_employees)
     do_statuses = bool(reset_employment_statuses)
     do_depts = bool(reset_departments_and_titles)
+    do_locations = bool(reset_locations)
     do_states = bool(reset_states_provinces)
     do_countries = bool(reset_countries)
 
@@ -457,7 +459,7 @@ def do_reset(
         )
         return RedirectResponse(url="/ui/settings/reset", status_code=303)
 
-    if not any((do_employees, do_statuses, do_depts, do_states, do_countries)):
+    if not any((do_employees, do_statuses, do_depts, do_locations, do_states, do_countries)):
         flash(request, "Nothing was selected to reset.", "warning")
         return RedirectResponse(url="/ui/settings/reset", status_code=303)
 
@@ -474,6 +476,10 @@ def do_reset(
         if do_depts:
             depts, titles = seed_data.reset_departments_and_titles(db)
             actions.append(f"departments ({depts}) and job titles ({titles})")
+
+        if do_locations:
+            n = seed_data.reset_locations(db)
+            actions.append(f"locations ({n})")
 
         if do_states:
             n = seed_data.reset_states_provinces(db)

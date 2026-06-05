@@ -26,6 +26,7 @@ The core table.
 | `employment_status_id` | INTEGER | Yes | FK → `employment_statuses.id` |
 | `department_id` | INTEGER | Yes | FK → `departments.id` |
 | `job_title_id` | INTEGER | Yes | FK → `job_titles.id` (must belong to selected department) |
+| `location_id` | INTEGER | No | FK → `locations.id`. Optional — location is not required |
 | `hire_date` | DATE | Yes | |
 | `termination_date` | DATE | No | |
 | `supervisor_id` | INTEGER | Yes | FK → `employees.id` (self-referential; cannot equal own `id`) |
@@ -37,6 +38,7 @@ The core table.
 **Validation rules**:
 - `state_province_id`, if set, must reference a state belonging to `country_id`
 - `job_title_id` must reference a job title belonging to `department_id`
+- `location_id`, if set, must reference an existing location (it is optional and may be null)
 - `termination_date`, if set, must be on or after `hire_date`
 - `employee_number` is case-insensitive unique
 - `supervisor_id` must reference an employee record other than this one (no self-supervision)
@@ -105,6 +107,18 @@ Seeded with US states, Canadian provinces, and a few other common subdivisions. 
 
 Unique on (`department_id`, `name`). Seeded with 3-5 titles per default department.
 
+## Locations
+
+| Column | Type | Required | Notes |
+|---|---|---|---|
+| `id` | INTEGER | PK | |
+| `name` | TEXT | Yes | Unique display name |
+| `is_active` | BOOLEAN | Yes | Default `true`. Inactive locations hidden from new-employee dropdowns but preserved for existing records |
+
+Standalone lookup (no parent, no children). Referenced by employees via an **optional** FK (`employees.location_id`). Deleting a location is blocked with a 409 if any employee still references it — deactivate it instead.
+
+**Seeded defaults**: Chicago HQ, New York Office, San Francisco Office, Austin Office, London Office, Toronto Office, Remote - US, Remote - International.
+
 ## Supervisors
 
 There is no separate supervisors table. The `employees.supervisor_id` column is a self-referential foreign key to `employees.id`.
@@ -170,6 +184,7 @@ Issued JWTs are signed with an app-wide signing key stored in `/data/jwt_signing
 - `employees.is_archived` (for filtering)
 - `employees.employment_status_id` (for filtering)
 - `employees.supervisor_id` (for finding direct reports)
+- `employees.location_id` (for filtering)
 - `employees.last_name, first_name` (for default sort)
 - `app_users.username` (unique)
 - `api_keys.key_hash` (unique)
@@ -183,5 +198,6 @@ On first startup:
 3. Populate `states_provinces` with US/CA defaults
 4. Populate `employment_statuses` with the four defaults above
 5. Populate `departments` and `job_titles` with sample data
-6. Create 2 sample employees: the first with no supervisor, the second supervised by the first. Both seeded with **Not Active** employment status.
-7. Write `/data/INITIAL_CREDENTIALS.txt`
+6. Populate `locations` with the eight defaults
+7. Create 2 sample employees: the first with no supervisor, the second supervised by the first. Both seeded with **Not Active** employment status.
+8. Write `/data/INITIAL_CREDENTIALS.txt`

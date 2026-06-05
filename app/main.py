@@ -99,6 +99,7 @@ def create_app() -> FastAPI:
     from app.api.v1.employees import router as employees_router
     from app.api.v1.employment_statuses import router as employment_statuses_router
     from app.api.v1.job_titles import router as job_titles_router
+    from app.api.v1.locations import router as locations_router
     from app.api.v1.oauth_clients import router as oauth_clients_router
     from app.api.v1.oauth_token import router as oauth_token_router
     from app.api.v1.session_auth import router as session_auth_router
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(employment_statuses_router, prefix="/api/v1")
     app.include_router(departments_router, prefix="/api/v1")
     app.include_router(job_titles_router, prefix="/api/v1")
+    app.include_router(locations_router, prefix="/api/v1")
     app.include_router(employees_router, prefix="/api/v1")
 
     # /oauth/token (RFC 6749 - mounted at root, not under /api/v1)

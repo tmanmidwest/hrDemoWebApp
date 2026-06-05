@@ -125,6 +125,7 @@ def test_lookup_pages_render(ui_session: TestClient) -> None:
         "/ui/lookups/employment-statuses",
         "/ui/lookups/departments",
         "/ui/lookups/job-titles",
+        "/ui/lookups/locations",
     ]:
         resp = ui_session.get(path)
         assert resp.status_code == 200, f"{path} returned {resp.status_code}"
@@ -301,3 +302,17 @@ def test_static_css_served(client: TestClient) -> None:
 def test_static_js_served(client: TestClient) -> None:
     resp = client.get("/static/app.js")
     assert resp.status_code == 200
+
+
+def test_lookup_new_location_and_then_edit(ui_session: TestClient) -> None:
+    # Create
+    resp = ui_session.post(
+        "/ui/lookups/locations/new",
+        data={"name": "Test Location", "is_active": "1"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    # Find it
+    list_resp = ui_session.get("/ui/lookups/locations")
+    assert "Test Location" in list_resp.text

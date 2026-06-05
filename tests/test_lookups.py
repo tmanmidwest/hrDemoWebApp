@@ -17,6 +17,7 @@ def test_lookup_endpoints_require_auth(client: TestClient) -> None:
         "/api/v1/employment-statuses/",
         "/api/v1/departments/",
         "/api/v1/job-titles/",
+        "/api/v1/locations/",
     ]:
         resp = client.get(path)
         assert resp.status_code == 401, f"{path} did not require auth"
@@ -244,3 +245,70 @@ def test_delete_referenced_job_title_returns_409(api_client: TestClient) -> None
     )
     resp = api_client.delete(f"/api/v1/job-titles/{ref['id']}")
     assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Locations
+# ---------------------------------------------------------------------------
+
+
+def test_list_locations_returns_seeded_data(api_client: TestClient) -> None:
+    resp = api_client.get("/api/v1/locations/")
+    assert resp.status_code == 200
+    locations = resp.json()
+    names = {loc["name"] for loc in locations}
+    assert "Chicago HQ" in names
+    assert len(locations) >= 8
+
+
+def test_create_location(api_client: TestClient) -> None:
+    resp = api_client.post("/api/v1/locations/", json={"name": "Berlin Office"})
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["name"] == "Berlin Office"
+    assert body["is_active"] is True
+
+
+def test_create_location_duplicate_name_returns_409(api_client: TestClient) -> None:
+    resp = api_client.post("/api/v1/locations/", json={"name": "Chicago HQ"})
+    assert resp.status_code == 409
+
+
+def test_update_location(api_client: TestClient) -> None:
+    list_resp = api_client.get("/api/v1/locations/")
+    candidate = next(loc for loc in list_resp.json() if loc["name"] == "Austin Office")
+    resp = api_client.patch(
+        f"/api/v1/locations/{candidate['id']}",
+        json={"name": "Austin HQ", "is_active": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Austin HQ"
+    assert resp.json()["is_active"] is False
+
+
+def test_filter_locations_by_is_active(api_client: TestClient) -> None:
+    # Deactivate one
+    list_resp = api_client.get("/api/v1/locations/")
+    target = next(loc for loc in list_resp.json() if loc["name"] == "London Office")
+    api_client.patch(f"/api/v1/locations/{target['id']}", json={"is_active": False})
+
+    active = api_client.get("/api/v1/locations/?is_active=true").json()
+    inactive = api_client.get("/api/v1/locations/?is_active=false").json()
+    active_names = {loc["name"] for loc in active}
+    inactive_names = {loc["name"] for loc in inactive}
+    assert "London Office" not in active_names
+    assert "London Office" in inactive_names
+
+
+def test_delete_location_with_no_references(api_client: TestClient) -> None:
+    create_resp = api_client.post(
+        "/api/v1/locations/", json={"name": "Throwaway Office"}
+    )
+    loc_id = create_resp.json()["id"]
+    resp = api_client.delete(f"/api/v1/locations/{loc_id}")
+    assert resp.status_code == 204
+    assert api_client.get(f"/api/v1/locations/{loc_id}").status_code == 404
+
+
+def test_get_location_not_found(api_client: TestClient) -> None:
+    assert api_client.get("/api/v1/locations/999999").status_code == 404

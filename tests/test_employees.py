@@ -29,6 +29,7 @@ def lookup_ids(api_client: TestClient) -> dict[str, int]:
     depts = api_client.get("/api/v1/departments/").json()
     titles = api_client.get("/api/v1/job-titles/").json()
     states = api_client.get("/api/v1/states-provinces/").json()
+    locations = api_client.get("/api/v1/locations/").json()
 
     eng = next(d for d in depts if d["name"] == "Engineering")
     eng_title = next(
@@ -59,6 +60,12 @@ def lookup_ids(api_client: TestClient) -> dict[str, int]:
         "sales_id": sales["id"],
         "eng_swe_title_id": eng_title["id"],
         "sales_title_id": sales_title["id"],
+        "chicago_location_id": next(
+            loc for loc in locations if loc["name"] == "Chicago HQ"
+        )["id"],
+        "ny_location_id": next(
+            loc for loc in locations if loc["name"] == "New York Office"
+        )["id"],
     }
 
 
@@ -509,3 +516,111 @@ def test_employee_list_works_with_oauth_jwt(
     )
     assert resp.status_code == 200
     assert len(resp.json()) >= 0
+
+
+# ---------------------------------------------------------------------------
+# Location (optional field)
+# ---------------------------------------------------------------------------
+
+
+def test_create_employee_without_location_is_allowed(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    """Location is optional — an employee can be created without one."""
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E20001"
+    )
+    resp = api_client.post("/api/v1/employees/", json=payload)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["location"] is None
+
+
+def test_create_employee_with_location(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E20002"
+    )
+    payload["location_id"] = lookup_ids["chicago_location_id"]
+    resp = api_client.post("/api/v1/employees/", json=payload)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["location"] is not None
+    assert body["location"]["id"] == lookup_ids["chicago_location_id"]
+    assert body["location"]["name"] == "Chicago HQ"
+
+
+def test_create_employee_invalid_location_rejected(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E20003"
+    )
+    payload["location_id"] = 999999
+    resp = api_client.post("/api/v1/employees/", json=payload)
+    assert resp.status_code == 400
+    assert "location_id" in resp.json()["detail"]
+
+
+def test_update_employee_set_and_clear_location(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E20004"
+    )
+    created = api_client.post("/api/v1/employees/", json=payload).json()
+    emp_id = created["id"]
+
+    # Set a location
+    resp = api_client.patch(
+        f"/api/v1/employees/{emp_id}",
+        json={"location_id": lookup_ids["ny_location_id"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["location"]["name"] == "New York Office"
+
+    # Clear it again
+    resp = api_client.patch(f"/api/v1/employees/{emp_id}", json={"location_id": None})
+    assert resp.status_code == 200
+    assert resp.json()["location"] is None
+
+
+def test_update_employee_invalid_location_rejected(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E20005"
+    )
+    emp_id = api_client.post("/api/v1/employees/", json=payload).json()["id"]
+    resp = api_client.patch(
+        f"/api/v1/employees/{emp_id}", json={"location_id": 999999}
+    )
+    assert resp.status_code == 400
+
+
+def test_delete_location_referenced_by_employee_returns_409(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E20006"
+    )
+    payload["location_id"] = lookup_ids["chicago_location_id"]
+    api_client.post("/api/v1/employees/", json=payload)
+
+    resp = api_client.delete(
+        f"/api/v1/locations/{lookup_ids['chicago_location_id']}"
+    )
+    assert resp.status_code == 409
+    assert "employees" in resp.json()["detail"]

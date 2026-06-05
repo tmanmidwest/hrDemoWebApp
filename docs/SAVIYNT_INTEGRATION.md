@@ -109,6 +109,7 @@ Suggested mapping from HR fields to Saviynt user attributes. Adjust to match you
 | `home_phone` | `phonenumber` |
 | `department.name` | `departmentname` |
 | `job_title.name` | `title` |
+| `location.name` (nullable) | `locationname` |
 | `cost_center` | `costcenter` |
 | `country.code` | `country` |
 | `state_province.name` | `state` |

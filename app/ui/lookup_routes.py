@@ -19,6 +19,7 @@ from app.models import (
     Employee,
     EmploymentStatus,
     JobTitle,
+    Location,
     StateProvince,
 )
 from app.ui.dependencies import require_ui_user
@@ -906,3 +907,156 @@ def delete_title(
     db.commit()
     flash(request, f"Deleted {t.name}.", "success")
     return RedirectResponse(url="/ui/lookups/job-titles", status_code=303)
+
+
+# ===========================================================================
+# Locations
+# ===========================================================================
+
+LOCATIONS_CONFIG = ListConfig(
+    title="Locations",
+    subtitle="Optional locations assignable to employees.",
+    singular="Location",
+    plural="locations",
+    base_path="/ui/lookups/locations",
+)
+
+
+@router.get("/locations")
+def list_locations(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    rows_raw = db.query(Location).order_by(Location.name).all()
+    rows = [
+        {
+            "id": loc.id,
+            "is_active": loc.is_active,
+            "is_system": False,
+            "cells": [{"value": loc.name, "mono": False}],
+        }
+        for loc in rows_raw
+    ]
+    return render(
+        request,
+        "lookups/list.html",
+        current_user=user,
+        active_subsection="locations",
+        config=LOCATIONS_CONFIG,
+        headers=["Name"],
+        rows=rows,
+    )
+
+
+@router.get("/locations/new")
+def show_new_location(
+    request: Request,
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    return render(
+        request,
+        "lookups/location_form.html",
+        current_user=user,
+        active_subsection="locations",
+        row=None,
+        form={"is_active": True},
+        form_action="/ui/lookups/locations/new",
+    )
+
+
+@router.post("/locations/new")
+def create_location(
+    request: Request,
+    name: str = Form(...),
+    is_active: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    form = {"name": name.strip(), "is_active": bool(is_active)}
+    loc = Location(name=form["name"], is_active=form["is_active"])
+    db.add(loc)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return render(
+            request,
+            "lookups/location_form.html",
+            current_user=user,
+            active_subsection="locations",
+            row=None,
+            form=form,
+            form_action="/ui/lookups/locations/new",
+            error=f"Location '{form['name']}' already exists.",
+        )
+    flash(request, f"Added {form['name']}.", "success")
+    return RedirectResponse(url="/ui/lookups/locations", status_code=303)
+
+
+@router.get("/locations/{location_id}/edit")
+def show_edit_location(
+    location_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    loc = db.get(Location, location_id)
+    if loc is None:
+        raise HTTPException(status_code=404, detail="Location not found.")
+    return render(
+        request,
+        "lookups/location_form.html",
+        current_user=user,
+        active_subsection="locations",
+        row=loc,
+        form={"name": loc.name, "is_active": loc.is_active},
+        form_action=f"/ui/lookups/locations/{loc.id}/edit",
+    )
+
+
+@router.post("/locations/{location_id}/edit")
+def update_location(
+    location_id: int,
+    request: Request,
+    name: str = Form(...),
+    is_active: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    loc = db.get(Location, location_id)
+    if loc is None:
+        raise HTTPException(status_code=404, detail="Location not found.")
+    loc.name = name.strip()
+    loc.is_active = bool(is_active)
+    try:
+        db.commit()
+        flash(request, "Location updated.", "success")
+    except IntegrityError:
+        db.rollback()
+        flash(request, "Update failed (duplicate name?).", "error")
+    return RedirectResponse(url="/ui/lookups/locations", status_code=303)
+
+
+@router.post("/locations/{location_id}/delete")
+def delete_location(
+    location_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    loc = db.get(Location, location_id)
+    if loc is None:
+        raise HTTPException(status_code=404, detail="Location not found.")
+    emp_refs = count_references(db, Employee, Employee.location_id, location_id)
+    if emp_refs:
+        flash(
+            request,
+            f"Cannot delete '{loc.name}': still referenced by {emp_refs} employee(s). Deactivate it instead.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/lookups/locations", status_code=303)
+    db.delete(loc)
+    db.commit()
+    flash(request, f"Deleted {loc.name}.", "success")
+    return RedirectResponse(url="/ui/lookups/locations", status_code=303)

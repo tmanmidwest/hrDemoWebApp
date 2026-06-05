@@ -16,6 +16,7 @@ from app.models import (
     Employee,
     EmploymentStatus,
     JobTitle,
+    Location,
     StateProvince,
 )
 
@@ -99,6 +100,17 @@ def validate_department(db: Session, department_id: int) -> Department:
     if d is None:
         raise _bad_request(f"department_id {department_id} does not exist.")
     return d
+
+
+def validate_location(db: Session, location_id: int) -> Location:
+    """Resolve and return the location, or raise 400.
+
+    Only call this when location_id is not None — location is optional.
+    """
+    loc = db.get(Location, location_id)
+    if loc is None:
+        raise _bad_request(f"location_id {location_id} does not exist.")
+    return loc
 
 
 def validate_job_title_belongs_to_department(

@@ -20,6 +20,7 @@ from app.models import (
     Employee,
     EmploymentStatus,
     JobTitle,
+    Location,
     StateProvince,
 )
 from app.services.employee_validation import (
@@ -27,6 +28,7 @@ from app.services.employee_validation import (
     validate_department,
     validate_employment_status,
     validate_job_title_belongs_to_department,
+    validate_location,
     validate_state_belongs_to_country,
     validate_supervisor,
 )
@@ -46,6 +48,7 @@ OPTIONAL_COLUMNS = [
     {"key": "supervisor", "label": "Supervisor", "default": True},
     {"key": "hire_date", "label": "Hire Date", "default": True},
     {"key": "country", "label": "Country", "default": False},
+    {"key": "location", "label": "Location", "default": False},
 ]
 
 
@@ -152,6 +155,13 @@ def _form_dropdown_data(
         .all()
     )
 
+    locations = (
+        db.query(Location)
+        .filter(Location.is_active.is_(True))
+        .order_by(Location.name)
+        .all()
+    )
+
     states: list[StateProvince] = []
     if selected_country_id is not None:
         states = (
@@ -194,6 +204,7 @@ def _form_dropdown_data(
         "countries": countries,
         "statuses": statuses,
         "departments": departments,
+        "locations": locations,
         "states": states,
         "job_titles": job_titles,
         "eligible_supervisors": eligible_supervisors,
@@ -290,6 +301,7 @@ def show_edit_form(
         "employment_status_id": employee.employment_status_id,
         "department_id": employee.department_id,
         "job_title_id": employee.job_title_id,
+        "location_id": employee.location_id,
         "hire_date": employee.hire_date.isoformat() if employee.hire_date else None,
         "termination_date": (
             employee.termination_date.isoformat() if employee.termination_date else None
@@ -413,6 +425,7 @@ async def _parse_employee_form(request: Request) -> dict[str, object]:
         "employment_status_id": _parse_int(form.get("employment_status_id")),  # type: ignore[arg-type]
         "department_id": _parse_int(form.get("department_id")),  # type: ignore[arg-type]
         "job_title_id": _parse_int(form.get("job_title_id")),  # type: ignore[arg-type]
+        "location_id": _parse_int(form.get("location_id")),  # type: ignore[arg-type]
         "hire_date": _parse_date(form.get("hire_date")),  # type: ignore[arg-type]
         "termination_date": _parse_date(form.get("termination_date")),  # type: ignore[arg-type]
         "supervisor_id": _parse_int(form.get("supervisor_id")),  # type: ignore[arg-type]
@@ -489,6 +502,8 @@ async def create_employee(
         validate_job_title_belongs_to_department(
             db, data["job_title_id"], data["department_id"]  # type: ignore[arg-type]
         )
+        if data["location_id"] is not None:
+            validate_location(db, data["location_id"])  # type: ignore[arg-type]
         if data["hire_date"] is None:
             raise ValueError("Hire date is required.")
         if data["termination_date"] is not None and data["termination_date"] < data["hire_date"]:  # type: ignore[operator]
@@ -571,6 +586,8 @@ async def update_employee(
         validate_job_title_belongs_to_department(
             db, data["job_title_id"], data["department_id"]  # type: ignore[arg-type]
         )
+        if data["location_id"] is not None:
+            validate_location(db, data["location_id"])  # type: ignore[arg-type]
         if data["termination_date"] is not None and data["termination_date"] < data["hire_date"]:  # type: ignore[operator]
             raise ValueError("Termination date must be on or after hire date.")
         if must_have_supervisor and data["supervisor_id"] is None:

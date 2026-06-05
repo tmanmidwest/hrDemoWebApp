@@ -178,6 +178,15 @@
         </select>
       </div>
       <div>
+        <label class="label" for="location_id">Location</label>
+        <select class="select" id="location_id" name="location_id">
+          <option value="">— None —</option>
+          {% for loc in locations %}
+          <option value="{{ loc.id }}" {% if form.location_id == loc.id %}selected{% endif %}>{{ loc.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
         <label class="label" for="hire_date">Hire Date<span class="label__required">*</span></label>
         <input class="input" type="date" id="hire_date" name="hire_date"
                value="{{ form.hire_date or '' }}" required />
