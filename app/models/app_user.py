@@ -16,6 +16,9 @@ class AppUser(Base, TimestampMixin):
 
     The `is_seeded` flag identifies the bootstrapped `robbytheadmin` account
     so the reset script can target it without affecting other admin accounts.
+
+    `password_hash` is nullable: users provisioned via OIDC single sign-on have
+    no local password and authenticate through their identity provider.
     """
 
     __tablename__ = "app_users"
@@ -24,7 +27,7 @@ class AppUser(Base, TimestampMixin):
     username: Mapped[str] = mapped_column(
         String(100), unique=True, nullable=False, index=True
     )
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_seeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(

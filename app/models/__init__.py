@@ -6,6 +6,7 @@ then tables that reference them.
 
 from app.models.api_key import ApiKey
 from app.models.app_user import AppUser
+from app.models.auth_provider import AuthProvider
 from app.models.country import Country
 from app.models.department import Department
 from app.models.employee import Employee
@@ -14,10 +15,12 @@ from app.models.job_title import JobTitle
 from app.models.location import Location
 from app.models.oauth_client import OAuthClient
 from app.models.state_province import StateProvince
+from app.models.user_identity import UserIdentity
 
 __all__ = [
     "ApiKey",
     "AppUser",
+    "AuthProvider",
     "Country",
     "Department",
     "Employee",
@@ -26,4 +29,5 @@ __all__ = [
     "Location",
     "OAuthClient",
     "StateProvince",
+    "UserIdentity",
 ]

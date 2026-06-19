@@ -14,7 +14,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import AppUser
+from app.models import AppUser, AuthProvider
 from app.services.auth import (
     SESSION_USER_ID_KEY,
     SESSION_USERNAME_KEY,
@@ -29,16 +29,29 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/ui", tags=["ui"], include_in_schema=False)
 
 
+def _enabled_providers(db: Session) -> list[AuthProvider]:
+    """Enabled SSO providers, in display order, for the login page buttons."""
+    return (
+        db.query(AuthProvider)
+        .filter(AuthProvider.is_enabled.is_(True))
+        .order_by(AuthProvider.display_name)
+        .all()
+    )
+
+
 @router.get("/login")
 def show_login(
     request: Request,
     next: str = "/ui/employees",
     user: AppUser | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
 ) -> Response:
     """Show the login form. If already logged in, redirect to the next page."""
     if user is not None:
         return RedirectResponse(url=next, status_code=303)
-    return render(request, "login.html")
+    return render(
+        request, "login.html", providers=_enabled_providers(db), next=next
+    )
 
 
 @router.post("/login")
@@ -52,9 +65,20 @@ def do_login(
     """Process login form submission."""
     user = db.query(AppUser).filter(AppUser.username == username).one_or_none()
 
-    if user is None or not user.is_active or not verify_password(password, user.password_hash):
+    if (
+        user is None
+        or not user.is_active
+        or user.password_hash is None
+        or not verify_password(password, user.password_hash)
+    ):
         log.info("ui_login_failed", extra={"username": username})
-        return render(request, "login.html", error="Invalid username or password.")
+        return render(
+            request,
+            "login.html",
+            error="Invalid username or password.",
+            providers=_enabled_providers(db),
+            next=next,
+        )
 
     request.session[SESSION_USER_ID_KEY] = user.id
     request.session[SESSION_USERNAME_KEY] = user.username

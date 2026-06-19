@@ -8,6 +8,17 @@
   <link href="https://fonts.cdnfonts.com/css/geist" rel="stylesheet" />
   <link href="https://fonts.cdnfonts.com/css/geist-mono" rel="stylesheet" />
   <link rel="stylesheet" href="/static/app.css" />
+  <style>
+    .auth-divider {
+      display: flex; align-items: center; text-align: center;
+      color: var(--text-muted); font-size: 0.8rem;
+      margin: var(--s-4) 0;
+    }
+    .auth-divider::before, .auth-divider::after {
+      content: ""; flex: 1; border-bottom: 1px solid var(--line);
+    }
+    .auth-divider span { padding: 0 var(--s-3); }
+  </style>
 </head>
 <body>
 
@@ -36,7 +47,20 @@
       <div class="inline-error">{{ error }}</div>
       {% endif %}
 
+      {% if providers %}
+      <div class="sso-options">
+        {% for p in providers %}
+        <a class="btn btn--secondary" style="width: 100%; margin-bottom: var(--s-3);"
+           href="/ui/auth/{{ p.slug }}/login?next={{ next | urlencode }}">
+          Sign in with {{ p.display_name }}
+        </a>
+        {% endfor %}
+      </div>
+      <div class="auth-divider"><span>or</span></div>
+      {% endif %}
+
       <form method="post" action="/ui/login">
+        <input type="hidden" name="next" value="{{ next }}" />
         <div class="form-row">
           <label class="label" for="username">Username</label>
           <input type="text" id="username" name="username" class="input" autofocus required autocomplete="username" />

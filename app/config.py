@@ -63,6 +63,16 @@ class Settings(BaseSettings):
     )
     jwt_algorithm: str = Field(default="HS256", description="JWT signing algorithm.")
 
+    # --- SSO / OIDC ---
+    public_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Externally-reachable base URL of this app (e.g. https://hr.example.com). "
+            "Used to build OIDC redirect URIs behind an HTTPS proxy. If unset, the "
+            "redirect URI is derived from the incoming request."
+        ),
+    )
+
     # --- App metadata ---
     app_name: str = Field(default="Demo HR Source of Truth App")
     app_version: str = Field(default="0.1.0")
@@ -88,6 +98,11 @@ class Settings(BaseSettings):
     def session_secret_path(self) -> Path:
         """Path to the persisted session secret file."""
         return self.data_dir / "session_secret"
+
+    @property
+    def provider_secret_key_path(self) -> Path:
+        """Path to the key used to encrypt OIDC provider client secrets at rest."""
+        return self.data_dir / "provider_secret_key"
 
     @property
     def initial_credentials_path(self) -> Path:
@@ -120,6 +135,22 @@ class Settings(BaseSettings):
         new_key = secrets.token_urlsafe(48)
         self.jwt_signing_key_path.write_text(new_key)
         self.jwt_signing_key_path.chmod(0o600)
+        return new_key
+
+    def get_or_create_provider_secret_key(self) -> bytes:
+        """Return the Fernet key for encrypting OIDC provider client secrets.
+
+        Generates and persists a new key on first use. Persisting it means
+        encrypted provider secrets remain decryptable across restarts.
+        """
+        from cryptography.fernet import Fernet
+
+        self.ensure_data_dir()
+        if self.provider_secret_key_path.exists():
+            return self.provider_secret_key_path.read_text().strip().encode("utf-8")
+        new_key = Fernet.generate_key()
+        self.provider_secret_key_path.write_bytes(new_key)
+        self.provider_secret_key_path.chmod(0o600)
         return new_key
 
 

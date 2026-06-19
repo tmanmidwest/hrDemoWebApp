@@ -1,8 +1,9 @@
-"""UI routes for settings: admin users, API keys, OAuth clients, reset."""
+"""UI routes for settings: admin users, API keys, OAuth clients, SSO, reset."""
 
 from __future__ import annotations
 
 import logging
+import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -11,9 +12,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import ApiKey, AppUser, OAuthClient
+from app.models import ApiKey, AppUser, AuthProvider, OAuthClient, UserIdentity
+from app.models.auth_provider import DEFAULT_SCOPES
 from app.services import seed_data
+from app.services.oidc import callback_url
 from app.services.passwords import hash_password
+from app.services.secret_box import encrypt_secret
 from app.services.tokens import (
     generate_api_key,
     generate_oauth_client_id,
@@ -23,6 +27,8 @@ from app.services.tokens import (
 from app.ui.dependencies import require_ui_user
 from app.ui.flash import flash
 from app.ui.templating import render
+
+_SLUG_RE = re.compile(r"^[a-z0-9-]+$")
 
 log = logging.getLogger(__name__)
 
@@ -393,6 +399,287 @@ def delete_oauth_client(
     log.info("ui_oauth_client_deleted", extra={"oauth_client_id": client_pk, "by": user.username})
     flash(request, f"Deleted OAuth client '{name}'.", "success")
     return RedirectResponse(url="/ui/settings/oauth-clients", status_code=303)
+
+
+# ===========================================================================
+# Identity Providers (OIDC single sign-on)
+# ===========================================================================
+
+
+@router.get("/auth-providers")
+def list_auth_providers(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    providers = db.query(AuthProvider).order_by(AuthProvider.created_at.desc()).all()
+    # The redirect/callback URI each provider must have registered at the IdP.
+    redirect_uris = {p.id: callback_url(request, p.slug) for p in providers}
+    return render(
+        request,
+        "settings/auth_providers.html",
+        current_user=user,
+        active_subsection="auth_providers",
+        providers=providers,
+        redirect_uris=redirect_uris,
+    )
+
+
+@router.get("/auth-providers/new")
+def show_new_auth_provider(
+    request: Request,
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    return render(
+        request,
+        "settings/auth_provider_form.html",
+        current_user=user,
+        active_subsection="auth_providers",
+        provider=None,
+        form={"scopes": DEFAULT_SCOPES, "is_enabled": True},
+        # Show the callback pattern so the user can register it at the IdP.
+        callback_base=callback_url(request, "SLUG").replace("/SLUG/", "/<slug>/"),
+    )
+
+
+def _validate_provider_form(
+    slug: str, display_name: str, issuer_url: str, client_id: str
+) -> str | None:
+    """Return an error message if the form is invalid, else None."""
+    if not _SLUG_RE.match(slug):
+        return "Slug must contain only lowercase letters, numbers, and hyphens."
+    if not display_name:
+        return "Display name is required."
+    if not issuer_url.startswith(("http://", "https://")):
+        return "Issuer URL must start with http:// or https://."
+    if not client_id:
+        return "Client ID is required."
+    return None
+
+
+@router.post("/auth-providers/new")
+def create_auth_provider(
+    request: Request,
+    display_name: str = Form(...),
+    slug: str = Form(...),
+    issuer_url: str = Form(...),
+    client_id: str = Form(...),
+    client_secret: str = Form(""),
+    scopes: str = Form(DEFAULT_SCOPES),
+    is_enabled: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    slug = slug.strip().lower()
+    display_name = display_name.strip()
+    issuer_url = issuer_url.strip()
+    client_id = client_id.strip()
+    scopes = scopes.strip() or DEFAULT_SCOPES
+
+    form = {
+        "display_name": display_name,
+        "slug": slug,
+        "issuer_url": issuer_url,
+        "client_id": client_id,
+        "scopes": scopes,
+        "is_enabled": bool(is_enabled),
+    }
+
+    error = _validate_provider_form(slug, display_name, issuer_url, client_id)
+    if error:
+        return render(
+            request,
+            "settings/auth_provider_form.html",
+            current_user=user,
+            active_subsection="auth_providers",
+            provider=None,
+            form=form,
+            error=error,
+            callback_base=callback_url(request, "SLUG").replace("/SLUG/", "/<slug>/"),
+        )
+
+    provider = AuthProvider(
+        slug=slug,
+        display_name=display_name,
+        issuer_url=issuer_url,
+        client_id=client_id,
+        client_secret_encrypted=encrypt_secret(client_secret) if client_secret else "",
+        scopes=scopes,
+        is_enabled=bool(is_enabled),
+        created_by_user_id=user.id,
+    )
+    db.add(provider)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return render(
+            request,
+            "settings/auth_provider_form.html",
+            current_user=user,
+            active_subsection="auth_providers",
+            provider=None,
+            form=form,
+            error=f"A provider with slug '{slug}' already exists.",
+            callback_base=callback_url(request, "SLUG").replace("/SLUG/", "/<slug>/"),
+        )
+    log.info(
+        "ui_auth_provider_created",
+        extra={"provider_id": provider.id, "slug": slug, "by": user.username},
+    )
+    flash(request, f"Identity provider '{display_name}' created.", "success")
+    return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
+
+
+@router.get("/auth-providers/{provider_id}/edit")
+def show_edit_auth_provider(
+    provider_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    provider = db.get(AuthProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Identity provider not found.")
+    form = {
+        "display_name": provider.display_name,
+        "slug": provider.slug,
+        "issuer_url": provider.issuer_url,
+        "client_id": provider.client_id,
+        "scopes": provider.scopes,
+        "is_enabled": provider.is_enabled,
+    }
+    return render(
+        request,
+        "settings/auth_provider_form.html",
+        current_user=user,
+        active_subsection="auth_providers",
+        provider=provider,
+        form=form,
+        redirect_uri=callback_url(request, provider.slug),
+    )
+
+
+@router.post("/auth-providers/{provider_id}/edit")
+def update_auth_provider(
+    provider_id: int,
+    request: Request,
+    display_name: str = Form(...),
+    slug: str = Form(...),
+    issuer_url: str = Form(...),
+    client_id: str = Form(...),
+    client_secret: str = Form(""),
+    scopes: str = Form(DEFAULT_SCOPES),
+    is_enabled: str | None = Form(None),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    provider = db.get(AuthProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Identity provider not found.")
+
+    slug = slug.strip().lower()
+    display_name = display_name.strip()
+    issuer_url = issuer_url.strip()
+    client_id = client_id.strip()
+    scopes = scopes.strip() or DEFAULT_SCOPES
+
+    form = {
+        "display_name": display_name,
+        "slug": slug,
+        "issuer_url": issuer_url,
+        "client_id": client_id,
+        "scopes": scopes,
+        "is_enabled": bool(is_enabled),
+    }
+
+    error = _validate_provider_form(slug, display_name, issuer_url, client_id)
+    if error:
+        return render(
+            request,
+            "settings/auth_provider_form.html",
+            current_user=user,
+            active_subsection="auth_providers",
+            provider=provider,
+            form=form,
+            error=error,
+            redirect_uri=callback_url(request, provider.slug),
+        )
+
+    provider.slug = slug
+    provider.display_name = display_name
+    provider.issuer_url = issuer_url
+    provider.client_id = client_id
+    provider.scopes = scopes
+    provider.is_enabled = bool(is_enabled)
+    # Only replace the stored secret when a new one is supplied.
+    if client_secret:
+        provider.client_secret_encrypted = encrypt_secret(client_secret)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return render(
+            request,
+            "settings/auth_provider_form.html",
+            current_user=user,
+            active_subsection="auth_providers",
+            provider=provider,
+            form=form,
+            error=f"A provider with slug '{slug}' already exists.",
+            redirect_uri=callback_url(request, provider.slug),
+        )
+    log.info(
+        "ui_auth_provider_updated",
+        extra={"provider_id": provider.id, "slug": slug, "by": user.username},
+    )
+    flash(request, f"Identity provider '{display_name}' updated.", "success")
+    return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
+
+
+@router.post("/auth-providers/{provider_id}/toggle")
+def toggle_auth_provider(
+    provider_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    provider = db.get(AuthProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Identity provider not found.")
+    provider.is_enabled = not provider.is_enabled
+    db.commit()
+    state = "enabled" if provider.is_enabled else "disabled"
+    log.info(
+        "ui_auth_provider_toggled",
+        extra={"provider_id": provider_id, "state": state, "by": user.username},
+    )
+    flash(request, f"Identity provider '{provider.display_name}' {state}.", "success")
+    return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
+
+
+@router.post("/auth-providers/{provider_id}/delete")
+def delete_auth_provider(
+    provider_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    provider = db.get(AuthProvider, provider_id)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Identity provider not found.")
+    name = provider.display_name
+    # Remove identity links explicitly — SQLite FK cascade isn't reliably on.
+    db.query(UserIdentity).filter(UserIdentity.provider_id == provider.id).delete()
+    db.delete(provider)
+    db.commit()
+    log.info(
+        "ui_auth_provider_deleted",
+        extra={"provider_id": provider_id, "by": user.username},
+    )
+    flash(request, f"Deleted identity provider '{name}'.", "success")
+    return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
 
 
 # ===========================================================================
