@@ -9,15 +9,15 @@
   <link href="https://fonts.cdnfonts.com/css/geist-mono" rel="stylesheet" />
   <link rel="stylesheet" href="/static/app.css" />
   <style>
-    .auth-divider {
-      display: flex; align-items: center; text-align: center;
-      color: var(--text-muted); font-size: 0.8rem;
-      margin: var(--s-4) 0;
+    .local-login { margin-top: var(--s-5); border-top: 1px solid var(--line); }
+    .local-login > summary {
+      cursor: pointer; list-style: none; user-select: none;
+      text-align: center; color: var(--text-muted); font-size: 0.85rem;
+      padding: var(--s-4) var(--s-2) 0;
     }
-    .auth-divider::before, .auth-divider::after {
-      content: ""; flex: 1; border-bottom: 1px solid var(--line);
-    }
-    .auth-divider span { padding: 0 var(--s-3); }
+    .local-login > summary::-webkit-details-marker { display: none; }
+    .local-login > summary:hover { color: var(--text); text-decoration: underline; }
+    .local-login__body { margin-top: var(--s-4); }
   </style>
 </head>
 <body>
@@ -50,15 +50,31 @@
       {% if providers %}
       <div class="sso-options">
         {% for p in providers %}
-        <a class="btn btn--secondary" style="width: 100%; margin-bottom: var(--s-3);"
+        <a class="btn btn--primary" style="width: 100%; margin-bottom: var(--s-3);"
            href="/ui/auth/{{ p.slug }}/login?next={{ next | urlencode }}">
           Sign in with {{ p.display_name }}
         </a>
         {% endfor %}
       </div>
-      <div class="auth-divider"><span>or</span></div>
-      {% endif %}
 
+      {# Local login is secondary: hidden behind a toggle. Auto-expands if a
+         local sign-in attempt just failed so the error is shown in context. #}
+      <details class="local-login" {% if error %}open{% endif %}>
+        <summary>Use local credentials instead</summary>
+        <form method="post" action="/ui/login" class="local-login__body">
+          <input type="hidden" name="next" value="{{ next }}" />
+          <div class="form-row">
+            <label class="label" for="username">Username</label>
+            <input type="text" id="username" name="username" class="input" required autocomplete="username" />
+          </div>
+          <div class="form-row">
+            <label class="label" for="password">Password</label>
+            <input type="password" id="password" name="password" class="input" required autocomplete="current-password" />
+          </div>
+          <button type="submit" class="btn btn--secondary" style="width: 100%;">Sign in</button>
+        </form>
+      </details>
+      {% else %}
       <form method="post" action="/ui/login">
         <input type="hidden" name="next" value="{{ next }}" />
         <div class="form-row">
@@ -71,6 +87,7 @@
         </div>
         <button type="submit" class="btn btn--primary" style="width: 100%;">Sign in</button>
       </form>
+      {% endif %}
 
       <div style="margin-top: var(--s-8); text-align: center;">
         <div class="auth-card__mark">POC · non-production</div>
