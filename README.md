@@ -12,8 +12,8 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 - Includes a refined-minimal web UI for managing employees, lookups, admin users, and API credentials
 - Supports both **API key** and **OAuth 2.0 Client Credentials** authentication for the REST API
 - Reset-data feature for returning to a clean state between demos
-- Ships as a single Docker container with SQLite persistence
-- Deployable locally, to AWS ECS/Fargate (scripted, one command), Azure Container Apps, or any Kubernetes cluster
+- Ships as a single Docker container (built from source) with SQLite persistence
+- Deployable locally, via Portainer, to AWS ECS/Fargate (scripted, one command), Azure Container Apps, or any Kubernetes cluster
 
 ## Quick start
 
@@ -22,20 +22,29 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 ```bash
 git clone https://github.com/tmanmidwest/hrDemoWebApp.git
 cd hrDemoWebApp
-docker compose up -d
+docker compose up -d --build
 ```
 
-Then open your browser to **http://localhost:8000** — the root URL redirects to the web UI, which redirects to the login page if you're not signed in.
+The bundled `docker-compose.yml` builds the image from source — there is no public prebuilt image to pull. Then open your browser to **http://localhost:8000** — the root URL redirects to the web UI, which redirects to the login page if you're not signed in.
 
-### Local Docker (image only)
+### Local Docker (build and run)
 
 ```bash
+git clone https://github.com/tmanmidwest/hrDemoWebApp.git
+cd hrDemoWebApp
+docker build -t demo-hr-sot:local .
 docker run -d \
   --name demo-hr-sot \
   -p 8000:8000 \
   -v $(pwd)/data:/data \
-  ghcr.io/tmanmidwest/hrdemowebapp:latest
+  demo-hr-sot:local
 ```
+
+### Portainer (Docker host with a web UI)
+
+Running this on a home server, NAS, or any Docker host you manage through [Portainer](https://www.portainer.io/)? Create a **Stack** pointed at this Git repo — Portainer builds the image from source, manages the persistent `/data` volume, and starts the container for you. (There is no public prebuilt image; build-from-source is the supported path.)
+
+See the [Portainer section in DEPLOYMENT.md](docs/DEPLOYMENT.md#portainer) for the step-by-step repository-stack setup.
 
 ### AWS ECS Fargate (scripted)
 
