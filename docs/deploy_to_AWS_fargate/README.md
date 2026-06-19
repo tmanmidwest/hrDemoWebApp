@@ -84,7 +84,10 @@ deploy them live:
 ```
 
 Shows you the exact commit being deployed, asks for confirmation, then
-rebuilds the image and redeploys automatically.
+rebuilds the image and redeploys automatically. It also pins
+`HRSOT_PUBLIC_BASE_URL` to this instance's public URL (your HTTPS domain, or the
+ALB DNS name) so OIDC/OAuth single sign-on redirect URIs match what's registered
+at your identity provider.
 
 ---
 

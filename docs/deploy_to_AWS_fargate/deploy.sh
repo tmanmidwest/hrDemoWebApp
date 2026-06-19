@@ -504,6 +504,17 @@ fi
 # ── TASK DEFINITION ───────────────────────────────────────────────────────────
 header "Task definition"
 
+# Pin the public base URL so OIDC/OAuth redirect URIs exactly match what's
+# registered at the identity provider. Only set it here for HTTPS custom domains
+# (the value is known up front); for plain HTTP the ALB DNS name isn't created
+# yet at this point, so the app derives the redirect from forwarded request
+# headers instead, and ./update.sh pins it on subsequent deploys.
+PUBLIC_BASE_URL_ENV=""
+if [ "$ENABLE_HTTPS" = "true" ] && [ -n "$DOMAIN_NAME" ]; then
+  PUBLIC_BASE_URL_ENV=",
+        { \"name\": \"HRSOT_PUBLIC_BASE_URL\", \"value\": \"https://${DOMAIN_NAME}\" }"
+fi
+
 log "Registering task definition..."
 TASK_DEF_ARN=$(aws ecs register-task-definition \
   --family "${APP_NAME}-webapp" \
@@ -521,7 +532,7 @@ TASK_DEF_ARN=$(aws ecs register-task-definition \
       \"environment\": [
         { \"name\": \"HRSOT_LOG_LEVEL\", \"value\": \"${LOG_LEVEL}\" },
         { \"name\": \"HRSOT_BIND_HOST\", \"value\": \"0.0.0.0\" },
-        { \"name\": \"HRSOT_BIND_PORT\", \"value\": \"${CONTAINER_PORT}\" }
+        { \"name\": \"HRSOT_BIND_PORT\", \"value\": \"${CONTAINER_PORT}\" }${PUBLIC_BASE_URL_ENV}
       ],
       \"mountPoints\": [{
         \"sourceVolume\": \"${APP_NAME}-data\",

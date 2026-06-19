@@ -164,10 +164,42 @@ success "Also tagged as: ${APP_NAME}-webapp:${COMMIT_SHA}"
 # ── REDEPLOY ECS ──────────────────────────────────────────────────────────────
 header "Redeploying to ECS"
 
+# Pin HRSOT_PUBLIC_BASE_URL to this deployment's public URL so OIDC/OAuth redirect
+# URIs exactly match what's registered at the identity provider. We re-register
+# the current task definition with the env var injected, then roll the service to
+# that new revision. (force-new-deployment alone keeps the old env vars.)
+log "Setting HRSOT_PUBLIC_BASE_URL=${APP_BASE} on the task definition..."
+NEW_TASK_DEF=$(aws ecs describe-task-definition \
+  --task-definition "${APP_NAME}-webapp" \
+  --region "$REGION" \
+  --query 'taskDefinition' --output json \
+  | APP_BASE="$APP_BASE" python3 -c '
+import json, os, sys
+td = json.load(sys.stdin)
+# Strip read-only fields that register-task-definition rejects.
+for k in ("taskDefinitionArn", "revision", "status", "requiresAttributes",
+          "compatibilities", "registeredAt", "registeredBy"):
+    td.pop(k, None)
+base = os.environ["APP_BASE"]
+for c in td.get("containerDefinitions", []):
+    env = [e for e in c.get("environment", []) if e.get("name") != "HRSOT_PUBLIC_BASE_URL"]
+    env.append({"name": "HRSOT_PUBLIC_BASE_URL", "value": base})
+    c["environment"] = env
+print(json.dumps(td))
+') || error "Failed to build updated task definition."
+
+NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+  --cli-input-json "$NEW_TASK_DEF" \
+  --region "$REGION" \
+  --query 'taskDefinition.taskDefinitionArn' --output text) \
+  || error "Failed to register updated task definition."
+success "Registered task definition: ${NEW_TASK_DEF_ARN##*/}"
+
 log "Forcing new ECS deployment with updated image..."
 aws ecs update-service \
   --cluster "$APP_NAME" \
   --service "${APP_NAME}-webapp" \
+  --task-definition "$NEW_TASK_DEF_ARN" \
   --force-new-deployment \
   --region "$REGION" >/dev/null
 success "ECS deployment triggered"
