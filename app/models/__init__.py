@@ -5,6 +5,7 @@ then tables that reference them.
 """
 
 from app.models.api_key import ApiKey
+from app.models.app_branding import AppBranding
 from app.models.app_user import AppUser
 from app.models.auth_provider import AuthProvider
 from app.models.country import Country
@@ -19,6 +20,7 @@ from app.models.user_identity import UserIdentity
 
 __all__ = [
     "ApiKey",
+    "AppBranding",
     "AppUser",
     "AuthProvider",
     "Country",

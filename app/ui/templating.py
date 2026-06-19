@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import __version__
 from app.models import AppUser
+from app.services.branding import current_branding
 from app.ui.flash import get_flashes
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -33,6 +34,7 @@ def render(
         "current_user": current_user,
         "flashes": get_flashes(request),
         "app_version": __version__,
+        "branding": current_branding(),
         "active_section": context.pop("active_section", None),
         "active_subsection": context.pop("active_subsection", None),
         "page_title": context.pop("page_title", None),

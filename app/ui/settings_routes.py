@@ -12,8 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import ApiKey, AppUser, AuthProvider, OAuthClient, UserIdentity
+from app.models import ApiKey, AppBranding, AppUser, AuthProvider, OAuthClient, UserIdentity
+from app.models.app_branding import BRANDING_ID
 from app.models.auth_provider import DEFAULT_SCOPES
+from app.services import branding as branding_service
 from app.services import seed_data
 from app.services.oidc import callback_url
 from app.services.passwords import hash_password
@@ -29,6 +31,7 @@ from app.ui.flash import flash
 from app.ui.templating import render
 
 _SLUG_RE = re.compile(r"^[a-z0-9-]+$")
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 log = logging.getLogger(__name__)
 
@@ -680,6 +683,108 @@ def delete_auth_provider(
     )
     flash(request, f"Deleted identity provider '{name}'.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
+
+
+# ===========================================================================
+# Branding
+# ===========================================================================
+
+
+def _get_or_create_branding(db: Session) -> AppBranding:
+    """Return the singleton branding row, creating it from defaults if absent."""
+    branding = db.get(AppBranding, BRANDING_ID)
+    if branding is None:
+        branding = AppBranding(
+            id=BRANDING_ID,
+            brand_name=branding_service.DEFAULT_NAME,
+            brand_color="",
+            icon_key=branding_service.DEFAULT_ICON,
+        )
+        db.add(branding)
+        db.commit()
+    return branding
+
+
+@router.get("/branding")
+def show_branding(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    branding = _get_or_create_branding(db)
+    return render(
+        request,
+        "settings/branding.html",
+        current_user=user,
+        active_subsection="branding",
+        form={
+            "brand_name": branding.brand_name,
+            "brand_color": branding.brand_color or branding_service.DEFAULT_COLOR,
+            "icon_key": branding.icon_key,
+        },
+        icon_presets=branding_service.ICON_PRESETS,
+        default_color=branding_service.DEFAULT_COLOR,
+    )
+
+
+@router.post("/branding")
+def update_branding(
+    request: Request,
+    brand_name: str = Form(...),
+    brand_color: str = Form(""),
+    icon_key: str = Form(...),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    brand_name = brand_name.strip()
+    brand_color = brand_color.strip()
+    icon_key = icon_key.strip()
+
+    form = {
+        "brand_name": brand_name,
+        "brand_color": brand_color or branding_service.DEFAULT_COLOR,
+        "icon_key": icon_key,
+    }
+
+    def _reject(message: str) -> Response:
+        return render(
+            request,
+            "settings/branding.html",
+            current_user=user,
+            active_subsection="branding",
+            form=form,
+            icon_presets=branding_service.ICON_PRESETS,
+            default_color=branding_service.DEFAULT_COLOR,
+            error=message,
+        )
+
+    if not brand_name:
+        return _reject("Brand name is required.")
+    if len(brand_name) > 100:
+        return _reject("Brand name must be 100 characters or fewer.")
+    if brand_color and not _HEX_COLOR_RE.match(brand_color):
+        return _reject("Color must be a hex value like #1e293b.")
+    if icon_key not in branding_service.ICON_PRESETS:
+        return _reject("Please choose one of the available icons.")
+
+    # Store empty when the color matches the theme default so the app keeps
+    # following the theme rather than pinning to a now-stale hex.
+    if brand_color.lower() == branding_service.DEFAULT_COLOR.lower():
+        brand_color = ""
+
+    branding = _get_or_create_branding(db)
+    branding.brand_name = brand_name
+    branding.brand_color = brand_color
+    branding.icon_key = icon_key
+    db.commit()
+    branding_service.invalidate()
+
+    log.info(
+        "ui_branding_updated",
+        extra={"icon_key": icon_key, "has_color": bool(brand_color), "by": user.username},
+    )
+    flash(request, "Branding updated.", "success")
+    return RedirectResponse(url="/ui/settings/branding", status_code=303)
 
 
 # ===========================================================================
