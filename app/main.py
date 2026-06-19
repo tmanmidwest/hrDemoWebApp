@@ -185,6 +185,12 @@ def main() -> None:
         port=settings.bind_port,
         log_config=None,  # we configure logging ourselves
         access_log=False,
+        # Honor X-Forwarded-Proto/-For from the load balancer so the app knows
+        # it's being served over HTTPS (correct scheme in redirects, OAuth
+        # redirect URIs, etc.). The container is only reachable from the ALB,
+        # so trusting forwarded headers from any peer is safe here.
+        proxy_headers=True,
+        forwarded_allow_ips="*",
     )
 
 

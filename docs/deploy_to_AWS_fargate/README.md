@@ -32,6 +32,48 @@ your own ECR, and deploy it to Fargate — everything in your own AWS account.
 
 ---
 
+## Enabling HTTPS on a custom domain (optional)
+
+By default the app is served over plain HTTP at the generated ALB DNS name.
+You can instead serve it over **HTTPS on your own domain** (e.g.
+`testhr.trevorcombs.com`) — recommended if you'll integrate OAuth later.
+
+When enabled, `deploy.sh` provisions a **free AWS-managed (ACM) TLS certificate**,
+adds an HTTPS:443 listener to the load balancer, and redirects HTTP→HTTPS. The
+app container is unchanged — the load balancer terminates TLS.
+
+It's strictly opt-in. `deploy.sh` asks during the run, or you can pre-set it:
+
+```bash
+ENABLE_HTTPS=true DOMAIN_NAME=testhr.trevorcombs.com ./deploy.sh
+```
+
+**You'll add two CNAME records in Cloudflare during the deploy:**
+
+1. **Certificate validation** — the script prints a CNAME (name + target). Add it
+   in Cloudflare as **DNS only (grey cloud)**. The script waits until ACM validates
+   the certificate (usually 2–5 minutes). Leave this record in place permanently so
+   the certificate auto-renews.
+2. **The app record** — at the end, the script prints a CNAME pointing your domain
+   at the load balancer's DNS name. Add it (DNS only to start).
+
+Once that second record resolves, the app is live at `https://<your-domain>/`.
+
+> If the validation CNAME hasn't propagated in time, the script exits cleanly —
+> just re-run `./deploy.sh` once it has. It reuses the same certificate and
+> continues where it left off.
+
+**Cloudflare proxy (orange cloud), later:** you can switch the app record to the
+orange-cloud proxy and set **SSL/TLS → Full (strict)** in Cloudflare. The ACM
+certificate keeps the Cloudflare→ALB hop valid, and you get Cloudflare's WAF/CDN
+in front. DNS-only is fine to start.
+
+**Teardown** removes the certificate along with everything else. You'll need to
+delete the two leftover CNAME records from Cloudflare yourself (the script reminds
+you).
+
+---
+
 ## Pushing an update
 
 When changes have been merged to the main branch on GitHub and you want to
@@ -59,30 +101,53 @@ rebuilds the image and redeploys automatically.
 
 ---
 
+## Running more than one instance
+
+At deploy time `deploy.sh` asks for an **instance name** (default `hr-demo`).
+Each name is a fully isolated stack — its own load balancer, EFS storage,
+container, certificate, and URL — so you can run several in the same AWS account
+(e.g. a `hr-demo` POC instance and a `perm-test` instance for OAuth).
+
+```bash
+./deploy.sh                      # prompts for the instance name
+INSTANCE=perm-test ./deploy.sh   # or set it up front (skips the prompt)
+```
+
+Every management script discovers all instances automatically:
+
+- If there's only one, it just uses it (unchanged from before).
+- If there are several, it lists them and asks which one.
+- Set `INSTANCE=<name>` to pick one non-interactively, e.g.
+  `INSTANCE=perm-test ./manage.sh status` or `INSTANCE=perm-test ./teardown.sh`.
+
+> Each running instance has its own load balancer (~$16/month), so tear down the
+> ones you aren't using.
+
+---
+
 ## Managing from a second machine
 
 The management scripts (`manage.sh`, `update.sh`, `teardown.sh`) read a local
-`.hr-demo-state` file that `deploy.sh` writes on the machine you deployed from.
-It holds the IDs of your AWS resources but is **not** synced anywhere, so a
-second laptop won't have it — you'll see `No state file found` if you try to
+state file that `deploy.sh` writes on the machine you deployed from (named
+`.hr-demo-state` for the default instance, or `.hr-demo-state.<instance>` for
+others). It holds the IDs of your AWS resources but is **not** synced anywhere,
+so a second laptop won't have it — you'll see `No deployment found` if you try to
 manage from there.
 
 To manage an existing deployment from another machine, regenerate the file by
-rediscovering your resources from AWS (this creates nothing — it's read-only):
+rediscovering your resources from AWS (this creates nothing — it's read-only).
+`restore-state.sh` asks which instance name to restore (default `hr-demo`):
 
 ```bash
 chmod +x restore-state.sh
-./restore-state.sh             # uses your default AWS region
-./restore-state.sh us-west-2   # or pass the region you deployed to
+./restore-state.sh                       # default region; prompts for instance
+./restore-state.sh us-west-2             # or pass the region you deployed to
+INSTANCE=perm-test ./restore-state.sh    # restore a specific instance, no prompt
 ```
 
 Once it finishes you can run `./manage.sh status` (and the rest) normally.
 The file contains only AWS resource IDs — no secrets — so copying it between
 your own machines is also fine if you prefer.
-
-> Note: this assumes one `hr-demo` deployment per AWS account, which matches the
-> isolation model below. The lookups are by resource name, so running two in the
-> same account and region is not supported.
 
 ---
 
@@ -99,16 +164,19 @@ Stops all charges. Data is permanently deleted.
 
 ## How instances are isolated
 
-Every person runs `deploy.sh` against their own AWS account. Each deployment creates:
+Every person runs `deploy.sh` against their own AWS account, and within an
+account each **instance name** is its own isolated stack. Each deployment creates:
 - Its own ECR repository (image built from the same public GitHub source)
-- Its own ECS cluster, EFS filesystem, ALB, and security groups
-- Its own `.hr-demo-state` file tracking all resource IDs
+- Its own ECS cluster, EFS filesystem, ALB, and security groups — all named after
+  the instance, so multiple instances in one account never collide
+- Its own state file tracking all resource IDs (`.hr-demo-state` for the default
+  instance, `.hr-demo-state.<instance>` for others)
 
 This state file lives only on the machine you deployed from. To operate the same
 deployment from another machine, run `./restore-state.sh` there to rebuild it
 (see *Managing from a second machine*).
 
-Nobody shares infrastructure. Tearing down your instance has no effect on anyone else's.
+Nobody shares infrastructure. Tearing down one instance has no effect on any other.
 
 ---
 

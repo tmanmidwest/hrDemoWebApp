@@ -19,8 +19,6 @@ CHECKMARK="${GREEN}✔${NC}"
 ARROW="${BLUE}▶${NC}"
 WARNING="${YELLOW}⚠${NC}"
 
-STATE_FILE=".hr-demo-state"
-
 log()     { echo -e "${ARROW}  $1"; }
 success() { echo -e "${CHECKMARK}  $1"; }
 warn()    { echo -e "${WARNING}  ${YELLOW}$1${NC}"; }
@@ -38,12 +36,45 @@ SESSION_ACCOUNT=$(echo "$CALLER" | python3 -c "import sys,json; print(json.load(
 SESSION_USER=$(echo "$CALLER" | python3 -c "import sys,json; print(json.load(sys.stdin)['Arn'].split('/')[-1])")
 success "Logged in as: $SESSION_USER (Account: $SESSION_ACCOUNT)"
 
-[ -f "$STATE_FILE" ] || error "No state file found. Run deploy.sh first."
+# ── SELECT DEPLOYMENT INSTANCE ─────────────────────────────────────────────────
+# Find every instance's state file. Set INSTANCE=<name> to pick one directly;
+# otherwise use the only one, or choose from a list when several exist.
+shopt -s nullglob
+STATE_FILES=( .hr-demo-state* )
+shopt -u nullglob
+
+[ "${#STATE_FILES[@]}" -gt 0 ] || error "No deployment found. Run deploy.sh first."
+
+STATE_FILE=""
+if [ -n "${INSTANCE:-}" ]; then
+  for f in "${STATE_FILES[@]}"; do
+    grep -q "^APP_NAME=${INSTANCE}$" "$f" && { STATE_FILE="$f"; break; }
+  done
+  [ -n "$STATE_FILE" ] || error "No deployment found for instance '${INSTANCE}'."
+elif [ "${#STATE_FILES[@]}" -eq 1 ]; then
+  STATE_FILE="${STATE_FILES[0]}"
+else
+  echo ""
+  echo -e "  ${BOLD}Multiple deployments found — choose one:${NC}"
+  i=1
+  for f in "${STATE_FILES[@]}"; do
+    nm=$(grep '^APP_NAME=' "$f" | cut -d= -f2)
+    rg=$(grep '^REGION=' "$f" | cut -d= -f2)
+    echo -e "    ${BOLD}${i})${NC} ${nm}  (${rg})"
+    i=$((i + 1))
+  done
+  echo ""
+  read -rp "  Select [1-${#STATE_FILES[@]}]: " sel
+  { [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#STATE_FILES[@]}" ]; } \
+    || error "Invalid selection."
+  STATE_FILE="${STATE_FILES[$((sel - 1))]}"
+fi
+
 # shellcheck source=/dev/null
 source "$STATE_FILE"
 
 GHCR_IMAGE="ghcr.io/tmanmidwest/hrdemowebapp:latest"
-ECR_REPO="hr-demo-webapp"
+ECR_REPO="${APP_NAME}-webapp"
 ECR_IMAGE="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO}:latest"
 
 # ── PRE-FLIGHT ────────────────────────────────────────────────────────────────
