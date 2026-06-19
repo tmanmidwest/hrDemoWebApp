@@ -59,6 +59,17 @@ async def oidc_login(
         log.warning("oidc_authorize_redirect_failed", extra={"provider": slug, "error": str(exc)})
         flash(request, f"Could not start sign-in with {provider.display_name}.", "error")
         return RedirectResponse(url="/ui/login", status_code=303)
+    except Exception:
+        # Most often: the app can't reach the provider's discovery document
+        # (wrong issuer URL, network, or an untrusted TLS cert on the IdP).
+        log.exception("oidc_authorize_redirect_error", extra={"provider": slug})
+        flash(
+            request,
+            f"Could not start sign-in with {provider.display_name}. The app may be "
+            f"unable to reach {provider.issuer_url}. See server logs for details.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/login", status_code=303)
 
 
 @router.get("/{slug}/callback")
@@ -76,20 +87,45 @@ async def oidc_callback(
     client = build_client(provider)
     try:
         token = await client.authorize_access_token(request)
+        claims = token.get("userinfo")
+        if not claims:
+            claims = await client.userinfo(token=token)
     except OAuthError as exc:
         log.warning("oidc_callback_failed", extra={"provider": slug, "error": str(exc)})
         flash(request, f"Sign-in with {provider.display_name} failed or was cancelled.", "error")
         return RedirectResponse(url="/ui/login", status_code=303)
+    except Exception:
+        # Token endpoint / JWKS / userinfo call failed unexpectedly (network,
+        # TLS, or a malformed response from the provider).
+        log.exception("oidc_callback_error", extra={"provider": slug})
+        flash(
+            request,
+            f"Sign-in with {provider.display_name} hit an unexpected error. "
+            "See server logs for details.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/login", status_code=303)
 
-    claims = token.get("userinfo")
-    if not claims:
-        claims = await client.userinfo(token=token)
     if not claims or not claims.get("sub"):
         log.warning("oidc_no_subject", extra={"provider": slug})
         flash(request, "The identity provider did not return a usable profile.", "error")
         return RedirectResponse(url="/ui/login", status_code=303)
 
-    user = find_or_create_user(db, provider, dict(claims))
+    try:
+        user = find_or_create_user(db, provider, dict(claims))
+    except Exception:
+        db.rollback()
+        # Most often: the password_hash-nullable migration (0003) didn't run, or
+        # a username/identity uniqueness conflict.
+        log.exception("oidc_provision_error", extra={"provider": slug})
+        flash(
+            request,
+            "Could not provision your account from the identity provider. "
+            "See server logs for details.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/login", status_code=303)
+
     if not user.is_active:
         flash(request, "Your account is disabled. Contact an administrator.", "error")
         return RedirectResponse(url="/ui/login", status_code=303)
