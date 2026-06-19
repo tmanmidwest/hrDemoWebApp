@@ -97,8 +97,18 @@ Portainer clones the repo, builds the image from the included `Dockerfile`, and 
    - **Repository reference**: `refs/heads/main`
    - **Compose path**: `docker-compose.yml`
 4. *(Optional)* Enable **Automatic updates** (polling or webhook) so Portainer rebuilds and redeploys when `main` changes.
-5. *(Optional)* Add `HRSOT_*` environment variables under **Environment variables** — see the table below.
-6. Click **Deploy the stack**. The first deploy builds the image (a minute or two), then starts the container. When the health check goes green, browse to `http://<docker-host>:8000`.
+5. *(Optional)* Add environment variables under **Environment variables** — see the tables below.
+6. Click **Deploy the stack**. The first deploy builds the image (a minute or two), then starts the container. When the health check goes green, browse to `http://<docker-host>:8000` (or your chosen `HRSOT_HOST_PORT`).
+
+#### Changing the published port
+
+The bundled compose publishes the host port via a variable: `"${HRSOT_HOST_PORT:-8000}:8000"`. If host port 8000 is already in use on your Docker host (a common cause of a `Bind for 0.0.0.0:8000 failed: port is already allocated` deploy error), add a stack **Environment variable**:
+
+| Name | Value |
+|---|---|
+| `HRSOT_HOST_PORT` | `8080` |
+
+The container still listens on 8000 internally (so the healthcheck is unaffected); only the host-side mapping changes. The app is then reachable at `http://<docker-host>:8080`. `HRSOT_HOST_PORT` is a Compose substitution variable — it has no effect unless the repo's `docker-compose.yml` references it, which it does on `main`.
 
 The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags the result `demo-hr-sot:local`, mounts `./data:/data` for persistence, and sets `restart: unless-stopped` with the `/health` healthcheck. Portainer resolves the `./data` bind mount inside its stack working directory on the host.
 

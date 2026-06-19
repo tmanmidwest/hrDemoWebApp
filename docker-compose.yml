@@ -4,7 +4,7 @@ services:
     image: demo-hr-sot:local
     container_name: demo-hr-sot
     ports:
-      - "8000:8000"
+      - "${HRSOT_HOST_PORT:-8000}:8000"
     volumes:
       - ./data:/data
     environment:
