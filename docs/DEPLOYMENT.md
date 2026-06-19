@@ -54,9 +54,9 @@ services:
     image: demo-hr-sot:local
     container_name: demo-hr-sot
     ports:
-      - "8000:8000"
+      - "${HRSOT_HOST_PORT:-8000}:8000"
     volumes:
-      - ./data:/data
+      - hrsot-data:/data
     environment:
       HRSOT_LOG_LEVEL: INFO
     restart: unless-stopped
@@ -66,7 +66,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  hrsot-data:
 ```
+
+It uses a **named volume** (`hrsot-data`), not a host bind mount. The container runs as the non-root `hrsot` user (uid/gid 1000); a fresh named volume inherits the image's `/data` ownership, so the app can write its database and session secret. A bind mount (`./data:/data`) would be created root-owned on the host and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`.
 
 Run with:
 
@@ -110,7 +115,7 @@ The bundled compose publishes the host port via a variable: `"${HRSOT_HOST_PORT:
 
 The container still listens on 8000 internally (so the healthcheck is unaffected); only the host-side mapping changes. The app is then reachable at `http://<docker-host>:8080`. `HRSOT_HOST_PORT` is a Compose substitution variable — it has no effect unless the repo's `docker-compose.yml` references it, which it does on `main`.
 
-The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags the result `demo-hr-sot:local`, mounts `./data:/data` for persistence, and sets `restart: unless-stopped` with the `/health` healthcheck. Portainer resolves the `./data` bind mount inside its stack working directory on the host.
+The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags the result `demo-hr-sot:local`, persists `/data` to a **named volume** (`hrsot-data`), and sets `restart: unless-stopped` with the `/health` healthcheck. The named volume is important: the container runs as the non-root `hrsot` user (uid/gid 1000), and a fresh named volume inherits the image's `/data` ownership so the app can write its database and session secret. A host bind mount would be created root-owned and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`. Portainer creates and manages the `hrsot-data` volume for you; browse or back it up under **Volumes**.
 
 > **Requires a buildable host.** This builds the image on the Docker engine Portainer manages, so that engine must support image builds — true for a standard standalone Docker host. Portainer **Edge agents** and some restricted/Swarm setups disable in-stack builds; on those, mirror the image into a registry and use [Using a prebuilt image](#using-a-prebuilt-image-optional).
 
