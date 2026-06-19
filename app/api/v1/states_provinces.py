@@ -20,6 +20,7 @@ from app.schemas.lookups import (
     StateProvinceOut,
     StateProvinceUpdate,
 )
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,16 @@ def create_state(
         "state_created",
         extra={"state_id": state.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.state_province.created",
+        **principal_actor(principal),
+        target_type="state_province",
+        target_id=state.id,
+        target_label=state.name,
+        message=f"Created state/province '{state.name}'",
+        detail={"surface": "api"},
+    )
     return state
 
 
@@ -125,6 +136,16 @@ def update_state(
         "state_updated",
         extra={"state_id": state.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.state_province.updated",
+        **principal_actor(principal),
+        target_type="state_province",
+        target_id=state.id,
+        target_label=state.name,
+        message=f"Updated state/province '{state.name}'",
+        detail={"surface": "api"},
+    )
     return state
 
 
@@ -146,9 +167,20 @@ def delete_state(
             ("employees", Employee, Employee.state_province_id, state_id),
         ],
     )
+    state_name = state.name
     db.delete(state)
     db.commit()
     log.info(
         "state_deleted",
         extra={"state_id": state_id, "by": principal.identifier},
+    )
+    record_event(
+        category="lookup",
+        event_type="lookup.state_province.deleted",
+        **principal_actor(principal),
+        target_type="state_province",
+        target_id=state_id,
+        target_label=state_name,
+        message=f"Deleted state/province '{state_name}'",
+        detail={"surface": "api"},
     )

@@ -32,11 +32,17 @@ from app.services.employee_validation import (
     validate_state_belongs_to_country,
     validate_supervisor,
 )
+from app.services.audit import record_event
 from app.ui.dependencies import require_ui_user
 from app.ui.flash import flash
 from app.ui.templating import render
 
 log = logging.getLogger(__name__)
+
+
+def _emp_label(employee: Employee) -> str:
+    """Human label for an employee in audit events."""
+    return f"{employee.first_name} {employee.last_name} ({employee.employee_number})"
 
 router = APIRouter(prefix="/ui/employees", tags=["ui"], include_in_schema=False)
 
@@ -546,6 +552,19 @@ async def create_employee(
         "ui_employee_created",
         extra={"employee_id": employee.id, "by": user.username},
     )
+    record_event(
+        category="employee",
+        event_type="employee.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="employee",
+        target_id=employee.id,
+        target_label=_emp_label(employee),
+        message=f"Created employee {_emp_label(employee)}",
+        detail={"surface": "ui", "employee_number": employee.employee_number},
+        request=request,
+    )
     flash(request, f"Employee {employee.employee_number} created.", "success")
     return RedirectResponse(url="/ui/employees", status_code=303)
 
@@ -622,6 +641,19 @@ async def update_employee(
         )
 
     log.info("ui_employee_updated", extra={"employee_id": employee.id, "by": user.username})
+    record_event(
+        category="employee",
+        event_type="employee.updated",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="employee",
+        target_id=employee.id,
+        target_label=_emp_label(employee),
+        message=f"Updated employee {_emp_label(employee)}",
+        detail={"surface": "ui", "fields": list(data.keys())},
+        request=request,
+    )
     flash(request, f"Employee {employee.employee_number} updated.", "success")
     return RedirectResponse(url="/ui/employees", status_code=303)
 
@@ -649,6 +681,19 @@ def archive_employee(
             "ui_employee_archived",
             extra={"employee_id": employee_id, "by": user.username},
         )
+        record_event(
+            category="employee",
+            event_type="employee.archived",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="employee",
+            target_id=employee.id,
+            target_label=_emp_label(employee),
+            message=f"Archived employee {_emp_label(employee)}",
+            detail={"surface": "ui"},
+            request=request,
+        )
         flash(request, f"Employee {employee.employee_number} archived.", "success")
     return RedirectResponse(url="/ui/employees", status_code=303)
 
@@ -670,6 +715,19 @@ def restore_employee(
         log.info(
             "ui_employee_restored",
             extra={"employee_id": employee_id, "by": user.username},
+        )
+        record_event(
+            category="employee",
+            event_type="employee.restored",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="employee",
+            target_id=employee.id,
+            target_label=_emp_label(employee),
+            message=f"Restored employee {_emp_label(employee)}",
+            detail={"surface": "ui"},
+            request=request,
         )
         flash(request, f"Employee {employee.employee_number} restored.", "success")
     return RedirectResponse(url="/ui/employees?view=archived", status_code=303)

@@ -12,6 +12,7 @@ from app.api.v1._helpers import raise_conflict_if_referenced
 from app.db import get_db
 from app.models import Employee, Location
 from app.schemas.lookups import LocationCreate, LocationOut, LocationUpdate
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 
 log = logging.getLogger(__name__)
@@ -66,6 +67,16 @@ def create_location(
         "location_created",
         extra={"location_id": loc.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.location.created",
+        **principal_actor(principal),
+        target_type="location",
+        target_id=loc.id,
+        target_label=loc.name,
+        message=f"Created location '{loc.name}'",
+        detail={"surface": "api"},
+    )
     return loc
 
 
@@ -97,6 +108,16 @@ def update_location(
         "location_updated",
         extra={"location_id": loc.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.location.updated",
+        **principal_actor(principal),
+        target_type="location",
+        target_id=loc.id,
+        target_label=loc.name,
+        message=f"Updated location '{loc.name}'",
+        detail={"surface": "api"},
+    )
     return loc
 
 
@@ -118,9 +139,20 @@ def delete_location(
             ("employees", Employee, Employee.location_id, location_id),
         ],
     )
+    location_name = loc.name
     db.delete(loc)
     db.commit()
     log.info(
         "location_deleted",
         extra={"location_id": location_id, "by": principal.identifier},
+    )
+    record_event(
+        category="lookup",
+        event_type="lookup.location.deleted",
+        **principal_actor(principal),
+        target_type="location",
+        target_id=location_id,
+        target_label=location_name,
+        message=f"Deleted location '{location_name}'",
+        detail={"surface": "api"},
     )

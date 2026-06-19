@@ -14,9 +14,12 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import ApiKey, AppBranding, AppUser, AuthProvider, OAuthClient, UserIdentity
 from app.models.app_branding import BRANDING_ID
+from app.models.audit_event import AuditEvent
 from app.models.auth_provider import DEFAULT_SCOPES
 from app.services import branding as branding_service
 from app.services import seed_data
+from app.services import system_config
+from app.services.audit import prune_old_events, record_event
 from app.services.oidc import callback_url
 from app.services.passwords import hash_password
 from app.services.secret_box import encrypt_secret
@@ -36,6 +39,34 @@ _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ui/settings", tags=["ui"], include_in_schema=False)
+
+
+def _settings_event(
+    request: Request,
+    user: AppUser,
+    *,
+    category: str,
+    event_type: str,
+    target_type: str | None = None,
+    target_id: object = None,
+    target_label: str | None = None,
+    message: str = "",
+    detail: dict | None = None,
+) -> None:
+    """Record a settings-area audit event performed by a logged-in admin."""
+    record_event(
+        category=category,
+        event_type=event_type,
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type=target_type,
+        target_id=target_id,
+        target_label=target_label,
+        message=message,
+        detail={"surface": "ui", **(detail or {})},
+        request=request,
+    )
 
 
 # ===========================================================================
@@ -115,6 +146,15 @@ def create_admin(
         "ui_admin_created",
         extra={"target_user_id": new_user.id, "target_username": username, "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="admin_user",
+        event_type="admin_user.created",
+        target_type="app_user",
+        target_id=new_user.id,
+        target_label=username,
+        message=f"Created admin user '{username}'",
+    )
     flash(request, f"Admin user '{username}' created.", "success")
     return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
 
@@ -176,6 +216,15 @@ def change_password(
         "ui_password_changed",
         extra={"target_user_id": target.id, "target_username": target.username, "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="admin_user",
+        event_type="admin_user.password_changed",
+        target_type="app_user",
+        target_id=target.id,
+        target_label=target.username,
+        message=f"Changed password for admin user '{target.username}'",
+    )
     flash(request, f"Password updated for {target.username}.", "success")
     return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
 
@@ -201,6 +250,15 @@ def delete_admin(
     log.info(
         "ui_admin_deleted",
         extra={"target_user_id": user_id, "target_username": target.username, "by": user.username},
+    )
+    _settings_event(
+        request, user,
+        category="admin_user",
+        event_type="admin_user.deleted",
+        target_type="app_user",
+        target_id=user_id,
+        target_label=target.username,
+        message=f"Deleted admin user '{target.username}'",
     )
     flash(request, f"Deleted admin user '{target.username}'.", "success")
     return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
@@ -263,6 +321,16 @@ def create_api_key(
         "ui_api_key_created",
         extra={"api_key_id": key.id, "key_name": key.name, "prefix": prefix, "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="api_key",
+        event_type="api_key.created",
+        target_type="api_key",
+        target_id=key.id,
+        target_label=key.name,
+        message=f"Created API key '{key.name}'",
+        detail={"prefix": prefix},
+    )
     # Stash the full key in session so the list page can reveal it once
     request.session["_revealed_api_key"] = full_key
     return RedirectResponse(url="/ui/settings/api-keys", status_code=303)
@@ -282,6 +350,15 @@ def revoke_api_key(
         key.revoked_at = datetime.now(UTC)
         db.commit()
         log.info("ui_api_key_revoked", extra={"api_key_id": key_id, "by": user.username})
+        _settings_event(
+            request, user,
+            category="api_key",
+            event_type="api_key.revoked",
+            target_type="api_key",
+            target_id=key.id,
+            target_label=key.name,
+            message=f"Revoked API key '{key.name}'",
+        )
         flash(request, f"Revoked API key '{key.name}'.", "success")
     return RedirectResponse(url="/ui/settings/api-keys", status_code=303)
 
@@ -300,6 +377,15 @@ def delete_api_key(
     db.delete(key)
     db.commit()
     log.info("ui_api_key_deleted", extra={"api_key_id": key_id, "by": user.username})
+    _settings_event(
+        request, user,
+        category="api_key",
+        event_type="api_key.deleted",
+        target_type="api_key",
+        target_id=key_id,
+        target_label=name,
+        message=f"Deleted API key '{name}'",
+    )
     flash(request, f"Deleted API key '{name}'.", "success")
     return RedirectResponse(url="/ui/settings/api-keys", status_code=303)
 
@@ -361,6 +447,16 @@ def create_oauth_client(
         "ui_oauth_client_created",
         extra={"oauth_client_id": client.id, "client_id": client_id, "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="oauth_client",
+        event_type="oauth_client.created",
+        target_type="oauth_client",
+        target_id=client.id,
+        target_label=client.name,
+        message=f"Created OAuth client '{client.name}'",
+        detail={"client_id": client_id},
+    )
     request.session["_revealed_oauth_client"] = {
         "client_id": client_id,
         "client_secret": client_secret,
@@ -382,6 +478,15 @@ def revoke_oauth_client(
         client.revoked_at = datetime.now(UTC)
         db.commit()
         log.info("ui_oauth_client_revoked", extra={"oauth_client_id": client_pk, "by": user.username})
+        _settings_event(
+            request, user,
+            category="oauth_client",
+            event_type="oauth_client.revoked",
+            target_type="oauth_client",
+            target_id=client.id,
+            target_label=client.name,
+            message=f"Revoked OAuth client '{client.name}'",
+        )
         flash(request, f"Revoked OAuth client '{client.name}'.", "success")
     return RedirectResponse(url="/ui/settings/oauth-clients", status_code=303)
 
@@ -400,6 +505,15 @@ def delete_oauth_client(
     db.delete(client)
     db.commit()
     log.info("ui_oauth_client_deleted", extra={"oauth_client_id": client_pk, "by": user.username})
+    _settings_event(
+        request, user,
+        category="oauth_client",
+        event_type="oauth_client.deleted",
+        target_type="oauth_client",
+        target_id=client_pk,
+        target_label=name,
+        message=f"Deleted OAuth client '{name}'",
+    )
     flash(request, f"Deleted OAuth client '{name}'.", "success")
     return RedirectResponse(url="/ui/settings/oauth-clients", status_code=303)
 
@@ -530,6 +644,16 @@ def create_auth_provider(
         "ui_auth_provider_created",
         extra={"provider_id": provider.id, "slug": slug, "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="auth_provider",
+        event_type="auth_provider.created",
+        target_type="auth_provider",
+        target_id=provider.id,
+        target_label=display_name,
+        message=f"Created identity provider '{display_name}'",
+        detail={"slug": slug, "issuer_url": issuer_url},
+    )
     flash(request, f"Identity provider '{display_name}' created.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
 
@@ -637,6 +761,16 @@ def update_auth_provider(
         "ui_auth_provider_updated",
         extra={"provider_id": provider.id, "slug": slug, "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="auth_provider",
+        event_type="auth_provider.updated",
+        target_type="auth_provider",
+        target_id=provider.id,
+        target_label=display_name,
+        message=f"Updated identity provider '{display_name}'",
+        detail={"slug": slug, "secret_rotated": bool(client_secret)},
+    )
     flash(request, f"Identity provider '{display_name}' updated.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
 
@@ -657,6 +791,16 @@ def toggle_auth_provider(
     log.info(
         "ui_auth_provider_toggled",
         extra={"provider_id": provider_id, "state": state, "by": user.username},
+    )
+    _settings_event(
+        request, user,
+        category="auth_provider",
+        event_type="auth_provider.toggled",
+        target_type="auth_provider",
+        target_id=provider.id,
+        target_label=provider.display_name,
+        message=f"{state.capitalize()} identity provider '{provider.display_name}'",
+        detail={"state": state},
     )
     flash(request, f"Identity provider '{provider.display_name}' {state}.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
@@ -680,6 +824,15 @@ def delete_auth_provider(
     log.info(
         "ui_auth_provider_deleted",
         extra={"provider_id": provider_id, "by": user.username},
+    )
+    _settings_event(
+        request, user,
+        category="auth_provider",
+        event_type="auth_provider.deleted",
+        target_type="auth_provider",
+        target_id=provider_id,
+        target_label=name,
+        message=f"Deleted identity provider '{name}'",
     )
     flash(request, f"Deleted identity provider '{name}'.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
@@ -783,8 +936,90 @@ def update_branding(
         "ui_branding_updated",
         extra={"icon_key": icon_key, "has_color": bool(brand_color), "by": user.username},
     )
+    _settings_event(
+        request, user,
+        category="branding",
+        event_type="branding.updated",
+        target_type="branding",
+        target_label=brand_name,
+        message=f"Updated branding to '{brand_name}'",
+        detail={"icon_key": icon_key, "has_color": bool(brand_color)},
+    )
     flash(request, "Branding updated.", "success")
     return RedirectResponse(url="/ui/settings/branding", status_code=303)
+
+
+# ===========================================================================
+# System settings
+# ===========================================================================
+
+# Upper bound on the retention window (~10 years) — a sanity guard, not a policy.
+_MAX_RETENTION_DAYS = 3650
+
+
+@router.get("/system")
+def show_system(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    config = system_config.get_config(db)
+    return render(
+        request,
+        "settings/system.html",
+        current_user=user,
+        active_subsection="system",
+        form={"audit_retention_days": config.audit_retention_days},
+    )
+
+
+@router.post("/system")
+def update_system(
+    request: Request,
+    audit_retention_days: int = Form(...),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    if audit_retention_days < 0 or audit_retention_days > _MAX_RETENTION_DAYS:
+        return render(
+            request,
+            "settings/system.html",
+            current_user=user,
+            active_subsection="system",
+            form={"audit_retention_days": audit_retention_days},
+            error=(
+                f"Retention must be between 0 and {_MAX_RETENTION_DAYS} days "
+                "(0 keeps events forever)."
+            ),
+        )
+
+    previous = system_config.get_config(db).audit_retention_days
+    system_config.set_retention_days(db, audit_retention_days)
+
+    # Apply the new window immediately so lowering it takes effect now rather
+    # than waiting for the next daily sweep.
+    pruned = prune_old_events(audit_retention_days)
+
+    _settings_event(
+        request, user,
+        category="system",
+        event_type="system.settings.updated",
+        target_type="app_config",
+        message=f"Set audit retention to {audit_retention_days} day(s)",
+        detail={
+            "audit_retention_days": audit_retention_days,
+            "previous": previous,
+            "events_pruned": pruned,
+        },
+    )
+
+    msg = f"Audit retention set to {audit_retention_days} day(s)."
+    if audit_retention_days == 0:
+        msg = "Audit retention disabled — events are now kept forever."
+    if pruned:
+        msg += f" Removed {pruned} event(s) older than the new window."
+    flash(request, msg, "success")
+    return RedirectResponse(url="/ui/settings/system", status_code=303)
 
 
 # ===========================================================================
@@ -814,6 +1049,7 @@ def do_reset(
     reset_locations: str | None = Form(None),
     reset_states_provinces: str | None = Form(None),
     reset_countries: str | None = Form(None),
+    reset_audit_events: str | None = Form(None),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_ui_user),
 ) -> Response:
@@ -825,6 +1061,7 @@ def do_reset(
     do_locations = bool(reset_locations)
     do_states = bool(reset_states_provinces)
     do_countries = bool(reset_countries)
+    do_audit = bool(reset_audit_events)
 
     # Dependency check: tables referenced by employees must be reset together
     if (do_statuses or do_depts) and not do_employees:
@@ -851,7 +1088,9 @@ def do_reset(
         )
         return RedirectResponse(url="/ui/settings/reset", status_code=303)
 
-    if not any((do_employees, do_statuses, do_depts, do_locations, do_states, do_countries)):
+    if not any(
+        (do_employees, do_statuses, do_depts, do_locations, do_states, do_countries, do_audit)
+    ):
         flash(request, "Nothing was selected to reset.", "warning")
         return RedirectResponse(url="/ui/settings/reset", status_code=303)
 
@@ -885,6 +1124,12 @@ def do_reset(
         # re-seed sample employees because their FKs were wiped out
         if do_employees and (do_statuses or do_depts or do_states or do_countries):
             seed_data.seed_sample_employees(db)
+
+        # Clearing the audit log is independent of the other tables (no FKs).
+        if do_audit:
+            n = db.query(AuditEvent).delete()
+            db.commit()
+            actions.append(f"audit events ({n})")
     except Exception as exc:
         db.rollback()
         log.exception("ui_reset_failed", extra={"by": user.username})
@@ -892,5 +1137,14 @@ def do_reset(
         return RedirectResponse(url="/ui/settings/reset", status_code=303)
 
     log.warning("ui_reset_completed", extra={"by": user.username, "actions": actions})
+    # Record the reset itself — written after the wipe so it survives an audit clear
+    # and documents that the log was cleared.
+    _settings_event(
+        request, user,
+        category="system",
+        event_type="system.data_reset",
+        message="Reset demo data: " + ", ".join(actions),
+        detail={"actions": actions},
+    )
     flash(request, "Reset complete: " + ", ".join(actions) + ".", "success")
     return RedirectResponse(url="/ui/settings/reset", status_code=303)

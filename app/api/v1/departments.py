@@ -12,6 +12,7 @@ from app.api.v1._helpers import raise_conflict_if_referenced
 from app.db import get_db
 from app.models import Department, Employee, JobTitle
 from app.schemas.lookups import DepartmentCreate, DepartmentOut, DepartmentUpdate
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 
 log = logging.getLogger(__name__)
@@ -66,6 +67,16 @@ def create_department(
         "department_created",
         extra={"department_id": dept.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.department.created",
+        **principal_actor(principal),
+        target_type="department",
+        target_id=dept.id,
+        target_label=dept.name,
+        message=f"Created department '{dept.name}'",
+        detail={"surface": "api"},
+    )
     return dept
 
 
@@ -97,6 +108,16 @@ def update_department(
         "department_updated",
         extra={"department_id": dept.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.department.updated",
+        **principal_actor(principal),
+        target_type="department",
+        target_id=dept.id,
+        target_label=dept.name,
+        message=f"Updated department '{dept.name}'",
+        detail={"surface": "api"},
+    )
     return dept
 
 
@@ -119,9 +140,20 @@ def delete_department(
             ("job titles", JobTitle, JobTitle.department_id, dept_id),
         ],
     )
+    dept_name = dept.name
     db.delete(dept)
     db.commit()
     log.info(
         "department_deleted",
         extra={"department_id": dept_id, "by": principal.identifier},
+    )
+    record_event(
+        category="lookup",
+        event_type="lookup.department.deleted",
+        **principal_actor(principal),
+        target_type="department",
+        target_id=dept_id,
+        target_label=dept_name,
+        message=f"Deleted department '{dept_name}'",
+        detail={"surface": "api"},
     )

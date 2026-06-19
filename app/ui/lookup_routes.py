@@ -22,6 +22,7 @@ from app.models import (
     Location,
     StateProvince,
 )
+from app.services.audit import record_event
 from app.ui.dependencies import require_ui_user
 from app.ui.flash import flash
 from app.ui.templating import render
@@ -138,6 +139,19 @@ def create_country(
         )
     flash(request, f"Added country {form['code']}.", "success")
     log.info("ui_country_created", extra={"country_id": c.id, "by": user.username})
+    record_event(
+        category="lookup",
+        event_type="lookup.country.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="country",
+        target_id=c.id,
+        target_label=c.name,
+        message=f"Created country '{c.name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/countries", status_code=303)
 
 
@@ -192,6 +206,19 @@ def update_country(
             error="That code is already used by another country.",
         )
     flash(request, "Country updated.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.country.updated",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="country",
+        target_id=c.id,
+        target_label=c.name,
+        message=f"Updated country '{c.name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/countries", status_code=303)
 
 
@@ -214,10 +241,24 @@ def delete_country(
             "error",
         )
         return RedirectResponse(url="/ui/lookups/countries", status_code=303)
+    country_name = c.name
     db.delete(c)
     db.commit()
-    flash(request, f"Deleted {c.name}.", "success")
+    flash(request, f"Deleted {country_name}.", "success")
     log.info("ui_country_deleted", extra={"country_id": country_id, "by": user.username})
+    record_event(
+        category="lookup",
+        event_type="lookup.country.deleted",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="country",
+        target_id=country_id,
+        target_label=country_name,
+        message=f"Deleted country '{country_name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/countries", status_code=303)
 
 
@@ -331,6 +372,19 @@ def create_state(
             error="A state/province with that name already exists for this country.",
         )
     flash(request, f"Added {form['name']}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.state_province.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="state_province",
+        target_id=s.id,
+        target_label=s.name,
+        message=f"Created state/province '{s.name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/states-provinces", status_code=303)
 
 
@@ -387,6 +441,19 @@ def update_state(
         flash(request, "Update failed (duplicate name for that country?).", "error")
     else:
         flash(request, "State/province updated.", "success")
+        record_event(
+            category="lookup",
+            event_type="lookup.state_province.updated",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="state_province",
+            target_id=s.id,
+            target_label=s.name,
+            message=f"Updated state/province '{s.name}'",
+            detail={"surface": "ui"},
+            request=request,
+        )
     return RedirectResponse(url="/ui/lookups/states-provinces", status_code=303)
 
 
@@ -404,9 +471,23 @@ def delete_state(
     if refs:
         flash(request, f"Cannot delete {s.name}: still referenced by {refs} employee(s).", "error")
         return RedirectResponse(url="/ui/lookups/states-provinces", status_code=303)
+    state_name = s.name
     db.delete(s)
     db.commit()
-    flash(request, f"Deleted {s.name}.", "success")
+    flash(request, f"Deleted {state_name}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.state_province.deleted",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="state_province",
+        target_id=state_id,
+        target_label=state_name,
+        message=f"Deleted state/province '{state_name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/states-provinces", status_code=303)
 
 
@@ -499,6 +580,19 @@ def create_status(
             error=f"Employment status '{form['label']}' already exists.",
         )
     flash(request, f"Added status {form['label']}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.employment_status.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="employment_status",
+        target_id=s.id,
+        target_label=s.label,
+        message=f"Created employment status '{s.label}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/employment-statuses", status_code=303)
 
 
@@ -553,6 +647,19 @@ def update_status(
         flash(request, "Update failed (duplicate label?).", "error")
     else:
         flash(request, "Status updated.", "success")
+        record_event(
+            category="lookup",
+            event_type="lookup.employment_status.updated",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="employment_status",
+            target_id=s.id,
+            target_label=s.label,
+            message=f"Updated employment status '{s.label}'",
+            detail={"surface": "ui"},
+            request=request,
+        )
     return RedirectResponse(url="/ui/lookups/employment-statuses", status_code=303)
 
 
@@ -573,9 +680,23 @@ def delete_status(
     if refs:
         flash(request, f"Cannot delete '{s.label}': still referenced by {refs} employee(s).", "error")
         return RedirectResponse(url="/ui/lookups/employment-statuses", status_code=303)
+    status_label = s.label
     db.delete(s)
     db.commit()
-    flash(request, f"Deleted {s.label}.", "success")
+    flash(request, f"Deleted {status_label}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.employment_status.deleted",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="employment_status",
+        target_id=status_id,
+        target_label=status_label,
+        message=f"Deleted employment status '{status_label}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/employment-statuses", status_code=303)
 
 
@@ -661,6 +782,19 @@ def create_dept(
             error=f"Department '{form['name']}' already exists.",
         )
     flash(request, f"Added {form['name']}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.department.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="department",
+        target_id=d.id,
+        target_label=d.name,
+        message=f"Created department '{d.name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/departments", status_code=303)
 
 
@@ -702,6 +836,19 @@ def update_dept(
     try:
         db.commit()
         flash(request, "Department updated.", "success")
+        record_event(
+            category="lookup",
+            event_type="lookup.department.updated",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="department",
+            target_id=d.id,
+            target_label=d.name,
+            message=f"Updated department '{d.name}'",
+            detail={"surface": "ui"},
+            request=request,
+        )
     except IntegrityError:
         db.rollback()
         flash(request, "Update failed (duplicate name?).", "error")
@@ -727,9 +874,23 @@ def delete_dept(
             "error",
         )
         return RedirectResponse(url="/ui/lookups/departments", status_code=303)
+    dept_name = d.name
     db.delete(d)
     db.commit()
-    flash(request, f"Deleted {d.name}.", "success")
+    flash(request, f"Deleted {dept_name}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.department.deleted",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="department",
+        target_id=dept_id,
+        target_label=dept_name,
+        message=f"Deleted department '{dept_name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/departments", status_code=303)
 
 
@@ -838,6 +999,19 @@ def create_title(
             error=f"Job title '{form['name']}' already exists in that department.",
         )
     flash(request, f"Added {form['name']}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.job_title.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="job_title",
+        target_id=t.id,
+        target_label=t.name,
+        message=f"Created job title '{t.name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/job-titles", status_code=303)
 
 
@@ -883,6 +1057,19 @@ def update_title(
     try:
         db.commit()
         flash(request, "Job title updated.", "success")
+        record_event(
+            category="lookup",
+            event_type="lookup.job_title.updated",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="job_title",
+            target_id=t.id,
+            target_label=t.name,
+            message=f"Updated job title '{t.name}'",
+            detail={"surface": "ui"},
+            request=request,
+        )
     except IntegrityError:
         db.rollback()
         flash(request, "Update failed (duplicate?).", "error")
@@ -903,9 +1090,23 @@ def delete_title(
     if refs:
         flash(request, f"Cannot delete '{t.name}': still referenced by {refs} employee(s).", "error")
         return RedirectResponse(url="/ui/lookups/job-titles", status_code=303)
+    title_name = t.name
     db.delete(t)
     db.commit()
-    flash(request, f"Deleted {t.name}.", "success")
+    flash(request, f"Deleted {title_name}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.job_title.deleted",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="job_title",
+        target_id=title_id,
+        target_label=title_name,
+        message=f"Deleted job title '{title_name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/job-titles", status_code=303)
 
 
@@ -991,6 +1192,19 @@ def create_location(
             error=f"Location '{form['name']}' already exists.",
         )
     flash(request, f"Added {form['name']}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.location.created",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="location",
+        target_id=loc.id,
+        target_label=loc.name,
+        message=f"Created location '{loc.name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/locations", status_code=303)
 
 
@@ -1032,6 +1246,19 @@ def update_location(
     try:
         db.commit()
         flash(request, "Location updated.", "success")
+        record_event(
+            category="lookup",
+            event_type="lookup.location.updated",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="location",
+            target_id=loc.id,
+            target_label=loc.name,
+            message=f"Updated location '{loc.name}'",
+            detail={"surface": "ui"},
+            request=request,
+        )
     except IntegrityError:
         db.rollback()
         flash(request, "Update failed (duplicate name?).", "error")
@@ -1056,7 +1283,21 @@ def delete_location(
             "error",
         )
         return RedirectResponse(url="/ui/lookups/locations", status_code=303)
+    location_name = loc.name
     db.delete(loc)
     db.commit()
-    flash(request, f"Deleted {loc.name}.", "success")
+    flash(request, f"Deleted {location_name}.", "success")
+    record_event(
+        category="lookup",
+        event_type="lookup.location.deleted",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="location",
+        target_id=location_id,
+        target_label=location_name,
+        message=f"Deleted location '{location_name}'",
+        detail={"surface": "ui"},
+        request=request,
+    )
     return RedirectResponse(url="/ui/lookups/locations", status_code=303)

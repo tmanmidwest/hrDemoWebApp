@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import AppUser, AuthProvider, UserIdentity
+from app.services.audit import record_event
 from app.services.secret_box import decrypt_secret
 
 log = logging.getLogger(__name__)
@@ -152,5 +153,16 @@ def find_or_create_user(
             "provider": provider.slug,
             "subject": subject,
         },
+    )
+    record_event(
+        category="oidc",
+        event_type="oidc.jit.provisioned",
+        actor_type="idp",
+        actor_label=provider.slug,
+        target_type="app_user",
+        target_id=user.id,
+        target_label=username,
+        message=f"Provisioned new user '{username}' from {provider.display_name} (JIT)",
+        detail={"provider": provider.slug, "subject": subject, "email": email},
     )
     return user

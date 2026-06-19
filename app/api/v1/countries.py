@@ -16,6 +16,7 @@ from app.api.v1._helpers import raise_conflict_if_referenced
 from app.db import get_db
 from app.models import Country, Employee, StateProvince
 from app.schemas.lookups import CountryCreate, CountryOut, CountryUpdate
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 
 log = logging.getLogger(__name__)
@@ -76,6 +77,16 @@ def create_country(
         "country_created",
         extra={"country_id": country.id, "code": country.code, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.country.created",
+        **principal_actor(principal),
+        target_type="country",
+        target_id=country.id,
+        target_label=country.name,
+        message=f"Created country '{country.name}'",
+        detail={"surface": "api", "code": country.code},
+    )
     return country
 
 
@@ -109,6 +120,16 @@ def update_country(
         "country_updated",
         extra={"country_id": country.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.country.updated",
+        **principal_actor(principal),
+        target_type="country",
+        target_id=country.id,
+        target_label=country.name,
+        message=f"Updated country '{country.name}'",
+        detail={"surface": "api", "code": country.code},
+    )
     return country
 
 
@@ -133,9 +154,21 @@ def delete_country(
         ],
     )
 
+    country_name = country.name
+    country_code = country.code
     db.delete(country)
     db.commit()
     log.info(
         "country_deleted",
         extra={"country_id": country_id, "by": principal.identifier},
+    )
+    record_event(
+        category="lookup",
+        event_type="lookup.country.deleted",
+        **principal_actor(principal),
+        target_type="country",
+        target_id=country_id,
+        target_label=country_name,
+        message=f"Deleted country '{country_name}'",
+        detail={"surface": "api", "code": country_code},
     )

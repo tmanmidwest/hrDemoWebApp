@@ -23,6 +23,7 @@ from app.schemas.lookups import (
     EmploymentStatusOut,
     EmploymentStatusUpdate,
 )
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 
 log = logging.getLogger(__name__)
@@ -82,6 +83,16 @@ def create_status(
         "employment_status_created",
         extra={"status_id": new_status.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.employment_status.created",
+        **principal_actor(principal),
+        target_type="employment_status",
+        target_id=new_status.id,
+        target_label=new_status.label,
+        message=f"Created employment status '{new_status.label}'",
+        detail={"surface": "api"},
+    )
     return new_status
 
 
@@ -124,6 +135,16 @@ def update_status(
         "employment_status_updated",
         extra={"status_id": s.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.employment_status.updated",
+        **principal_actor(principal),
+        target_type="employment_status",
+        target_id=s.id,
+        target_label=s.label,
+        message=f"Updated employment status '{s.label}'",
+        detail={"surface": "api"},
+    )
     return s
 
 
@@ -149,9 +170,20 @@ def delete_status(
         ],
     )
 
+    status_label = s.label
     db.delete(s)
     db.commit()
     log.info(
         "employment_status_deleted",
         extra={"status_id": status_id, "by": principal.identifier},
+    )
+    record_event(
+        category="lookup",
+        event_type="lookup.employment_status.deleted",
+        **principal_actor(principal),
+        target_type="employment_status",
+        target_id=status_id,
+        target_label=status_label,
+        message=f"Deleted employment status '{status_label}'",
+        detail={"surface": "api"},
     )

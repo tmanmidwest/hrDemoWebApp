@@ -12,6 +12,7 @@ from app.api.v1._helpers import raise_conflict_if_referenced
 from app.db import get_db
 from app.models import Department, Employee, JobTitle
 from app.schemas.lookups import JobTitleCreate, JobTitleOut, JobTitleUpdate
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 
 log = logging.getLogger(__name__)
@@ -82,6 +83,16 @@ def create_job_title(
         "job_title_created",
         extra={"title_id": title.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.job_title.created",
+        **principal_actor(principal),
+        target_type="job_title",
+        target_id=title.id,
+        target_label=title.name,
+        message=f"Created job title '{title.name}'",
+        detail={"surface": "api"},
+    )
     return title
 
 
@@ -115,6 +126,16 @@ def update_job_title(
         "job_title_updated",
         extra={"title_id": title.id, "by": principal.identifier},
     )
+    record_event(
+        category="lookup",
+        event_type="lookup.job_title.updated",
+        **principal_actor(principal),
+        target_type="job_title",
+        target_id=title.id,
+        target_label=title.name,
+        message=f"Updated job title '{title.name}'",
+        detail={"surface": "api"},
+    )
     return title
 
 
@@ -136,9 +157,20 @@ def delete_job_title(
             ("employees", Employee, Employee.job_title_id, title_id),
         ],
     )
+    title_name = title.name
     db.delete(title)
     db.commit()
     log.info(
         "job_title_deleted",
         extra={"title_id": title_id, "by": principal.identifier},
+    )
+    record_event(
+        category="lookup",
+        event_type="lookup.job_title.deleted",
+        **principal_actor(principal),
+        target_type="job_title",
+        target_id=title_id,
+        target_label=title_name,
+        message=f"Deleted job title '{title_name}'",
+        detail={"surface": "api"},
     )

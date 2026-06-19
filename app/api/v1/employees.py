@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Employee, EmploymentStatus
 from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
+from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, get_authenticated_principal
 from app.services.employee_validation import (
     resolve_employment_status_by_value,
@@ -41,6 +42,11 @@ from app.services.employee_validation import (
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/employees", tags=["employees"])
+
+
+def _emp_label(employee: Employee) -> str:
+    """Human label for an employee in audit events."""
+    return f"{employee.first_name} {employee.last_name} ({employee.employee_number})"
 
 
 # Whitelist of sortable columns to prevent SQL injection via the sort parameter.
@@ -250,6 +256,16 @@ def create_employee(
             "by": principal.identifier,
         },
     )
+    record_event(
+        category="employee",
+        event_type="employee.created",
+        **principal_actor(principal),
+        target_type="employee",
+        target_id=employee.id,
+        target_label=_emp_label(employee),
+        message=f"Created employee {_emp_label(employee)}",
+        detail={"surface": "api", "employee_number": employee.employee_number},
+    )
     return employee
 
 
@@ -353,6 +369,16 @@ def update_employee(
             "by": principal.identifier,
         },
     )
+    record_event(
+        category="employee",
+        event_type="employee.updated",
+        **principal_actor(principal),
+        target_type="employee",
+        target_id=employee.id,
+        target_label=_emp_label(employee),
+        message=f"Updated employee {_emp_label(employee)}",
+        detail={"surface": "api", "fields": list(data.keys())},
+    )
     return employee
 
 
@@ -385,6 +411,16 @@ def archive_employee(
             "employee_archived",
             extra={"employee_id": employee_id, "by": principal.identifier},
         )
+        record_event(
+            category="employee",
+            event_type="employee.archived",
+            **principal_actor(principal),
+            target_type="employee",
+            target_id=employee.id,
+            target_label=_emp_label(employee),
+            message=f"Archived employee {_emp_label(employee)}",
+            detail={"surface": "api"},
+        )
     return employee
 
 
@@ -409,6 +445,16 @@ def restore_employee(
         log.info(
             "employee_restored",
             extra={"employee_id": employee_id, "by": principal.identifier},
+        )
+        record_event(
+            category="employee",
+            event_type="employee.restored",
+            **principal_actor(principal),
+            target_type="employee",
+            target_id=employee.id,
+            target_label=_emp_label(employee),
+            message=f"Restored employee {_emp_label(employee)}",
+            detail={"surface": "api"},
         )
     return employee
 
@@ -536,6 +582,20 @@ def terminate_employee(
             "by": principal.identifier,
         },
     )
+    record_event(
+        category="employee",
+        event_type="employee.terminated",
+        **principal_actor(principal),
+        target_type="employee",
+        target_id=employee.id,
+        target_label=_emp_label(employee),
+        message=f"Terminated employee {_emp_label(employee)}",
+        detail={
+            "surface": "api",
+            "status_value": body.employment_status_value,
+            "termination_date": effective_term_date.isoformat(),
+        },
+    )
     return employee
 
 
@@ -586,5 +646,15 @@ def reactivate_employee(
             "status_value": body.employment_status_value,
             "by": principal.identifier,
         },
+    )
+    record_event(
+        category="employee",
+        event_type="employee.reactivated",
+        **principal_actor(principal),
+        target_type="employee",
+        target_id=employee.id,
+        target_label=_emp_label(employee),
+        message=f"Reactivated employee {_emp_label(employee)}",
+        detail={"surface": "api", "status_value": body.employment_status_value},
     )
     return employee

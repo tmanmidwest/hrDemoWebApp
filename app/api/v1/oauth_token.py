@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import OAuthClient
+from app.services.audit import record_event
 from app.services.jwt_tokens import issue_access_token
 from app.services.tokens import verify_token
 
@@ -61,8 +62,22 @@ def token_endpoint(
     """
     client_ip = request.client.host if request.client else None
 
+    def _deny(reason: str) -> None:
+        """Record a denied token request."""
+        record_event(
+            category="oauth",
+            event_type="oauth.token.denied",
+            outcome="failure",
+            actor_type="oauth_client",
+            actor_label=client_id,
+            message=f"OAuth token request denied ({reason})",
+            detail={"reason": reason, "grant_type": grant_type},
+            request=request,
+        )
+
     if grant_type != "client_credentials":
         log.info("oauth_token_unsupported_grant", extra={"grant_type": grant_type})
+        _deny("unsupported_grant_type")
         return _oauth_error(
             "unsupported_grant_type",
             f"Grant type '{grant_type}' is not supported. Use 'client_credentials'.",
@@ -81,14 +96,17 @@ def token_endpoint(
 
     if oauth_client is None:
         log.info("oauth_token_unknown_client", extra={"client_id": client_id})
+        _deny("unknown_client")
         return invalid_client
 
     if oauth_client.revoked_at is not None:
         log.info("oauth_token_revoked_client", extra={"client_id": client_id})
+        _deny("revoked_client")
         return invalid_client
 
     if not verify_token(client_secret, oauth_client.client_secret_hash):
         log.info("oauth_token_bad_secret", extra={"client_id": client_id})
+        _deny("invalid_secret")
         return invalid_client
 
     # Issue the token
@@ -107,6 +125,21 @@ def token_endpoint(
             "client_id": oauth_client.client_id,
             "lifetime_seconds": oauth_client.token_lifetime_seconds,
         },
+    )
+    record_event(
+        category="oauth",
+        event_type="oauth.token.issued",
+        actor_type="oauth_client",
+        actor_label=oauth_client.client_id,
+        target_type="oauth_client",
+        target_id=oauth_client.id,
+        target_label=oauth_client.name,
+        message=f"Access token issued to '{oauth_client.client_id}'",
+        detail={
+            "grant_type": grant_type,
+            "lifetime_seconds": oauth_client.token_lifetime_seconds,
+        },
+        request=request,
     )
 
     return JSONResponse(

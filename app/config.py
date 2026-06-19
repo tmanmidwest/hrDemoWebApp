@@ -73,6 +73,15 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- Audit / activity log ---
+    audit_retention_days: int = Field(
+        default=30,
+        description=(
+            "Delete audit/activity events older than this many days. Pruned at "
+            "startup and once a day while running. Set to 0 to keep events forever."
+        ),
+    )
+
     # --- App metadata ---
     app_name: str = Field(default="Demo HR Source of Truth App")
     app_version: str = Field(default="0.1.0")

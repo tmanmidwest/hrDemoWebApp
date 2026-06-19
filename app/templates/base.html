@@ -48,6 +48,13 @@
           Employees
         </a>
 
+        <a href="/ui/activity" class="sidebar__link {% if active_section == 'activity' %}is-active{% endif %}">
+          <svg class="sidebar__link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M1.5 8h3l1.5-4 3 9 1.5-5h3.5"/>
+          </svg>
+          Activity
+        </a>
+
         <div class="sidebar__section-label">Lookups</div>
         <a href="/ui/lookups/countries" class="sidebar__link {% if active_subsection == 'countries' %}is-active{% endif %}">Countries</a>
         <a href="/ui/lookups/states-provinces" class="sidebar__link {% if active_subsection == 'states' %}is-active{% endif %}">States &amp; Provinces</a>
@@ -62,6 +69,7 @@
         <a href="/ui/settings/oauth-clients" class="sidebar__link {% if active_subsection == 'oauth_clients' %}is-active{% endif %}">OAuth Clients</a>
         <a href="/ui/settings/auth-providers" class="sidebar__link {% if active_subsection == 'auth_providers' %}is-active{% endif %}">Identity Providers</a>
         <a href="/ui/settings/branding" class="sidebar__link {% if active_subsection == 'branding' %}is-active{% endif %}">Branding</a>
+        <a href="/ui/settings/system" class="sidebar__link {% if active_subsection == 'system' %}is-active{% endif %}">System</a>
         <a href="/ui/settings/reset" class="sidebar__link {% if active_subsection == 'reset' %}is-active{% endif %}">Reset Data</a>
 
         <div class="sidebar__section-label">External</div>

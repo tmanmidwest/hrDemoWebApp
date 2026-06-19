@@ -20,6 +20,7 @@ from app.services.auth import (
     SESSION_USERNAME_KEY,
     get_optional_user,
 )
+from app.services.audit import record_event
 from app.services.passwords import verify_password
 from app.ui.flash import flash
 from app.ui.templating import render
@@ -72,6 +73,16 @@ def do_login(
         or not verify_password(password, user.password_hash)
     ):
         log.info("ui_login_failed", extra={"username": username})
+        record_event(
+            category="auth",
+            event_type="auth.login.failure",
+            outcome="failure",
+            actor_type="user",
+            actor_label=username,
+            message=f"Failed UI login for '{username}'",
+            detail={"method": "password", "surface": "ui"},
+            request=request,
+        )
         return render(
             request,
             "login.html",
@@ -86,6 +97,16 @@ def do_login(
     db.commit()
 
     log.info("ui_login_success", extra={"username": user.username, "user_id": user.id})
+    record_event(
+        category="auth",
+        event_type="auth.login.success",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        message=f"{user.username} signed in",
+        detail={"method": "password", "surface": "ui"},
+        request=request,
+    )
     flash(request, f"Welcome back, {user.username}.", "success")
     return RedirectResponse(url=next, status_code=303)
 
@@ -93,9 +114,21 @@ def do_login(
 @router.post("/logout")
 def do_logout(request: Request) -> Response:
     """Clear session and redirect to login."""
+    user_id = request.session.get(SESSION_USER_ID_KEY)
     username = request.session.get(SESSION_USERNAME_KEY)
     request.session.clear()
     log.info("ui_logout", extra={"username": username})
+    if username:
+        record_event(
+            category="auth",
+            event_type="auth.logout",
+            actor_type="user",
+            actor_label=username,
+            actor_id=user_id,
+            message=f"{username} signed out",
+            detail={"surface": "ui"},
+            request=request,
+        )
     return RedirectResponse(url="/ui/login", status_code=303)
 
 

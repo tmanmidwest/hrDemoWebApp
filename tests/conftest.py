@@ -24,10 +24,15 @@ def _isolated_data_dir(monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
 
         db_module._engine = None  # type: ignore[attr-defined]
         db_module._SessionLocal = None  # type: ignore[attr-defined]
+        # Reset cached system config so it reloads against each test's fresh DB
+        import app.services.system_config as system_config_module
+
+        system_config_module._cache = None  # type: ignore[attr-defined]
         yield path
         get_settings.cache_clear()
         db_module._engine = None  # type: ignore[attr-defined]
         db_module._SessionLocal = None  # type: ignore[attr-defined]
+        system_config_module._cache = None  # type: ignore[attr-defined]
 
 
 @pytest.fixture

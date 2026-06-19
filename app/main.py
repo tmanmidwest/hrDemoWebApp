@@ -8,6 +8,7 @@ or:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -27,6 +28,24 @@ from app.logging_config import configure_logging
 
 log = logging.getLogger(__name__)
 
+# How often the background task re-checks the audit retention window.
+_AUDIT_PRUNE_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def _audit_retention_loop() -> None:
+    """Prune expired audit events once a day while the app is running.
+
+    Startup pruning alone isn't enough for a long-lived instance that runs for
+    weeks without a restart, so this keeps the retention window enforced.
+    """
+    from app.services.audit import prune_old_events
+
+    while True:
+        await asyncio.sleep(_AUDIT_PRUNE_INTERVAL_SECONDS)
+        # prune_old_events does its own DB work and never raises; run it in a
+        # worker thread so the event loop isn't blocked.
+        await asyncio.to_thread(prune_old_events)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> Any:
@@ -36,6 +55,7 @@ async def lifespan(_app: FastAPI) -> Any:
 
     # Run migrations FIRST (before any DB access), then seed
     from app.db import get_session_factory
+    from app.services.audit import prune_old_events
     from app.services.migrations import run_migrations
     from app.services.seed_data import seed_database
 
@@ -44,6 +64,12 @@ async def lifespan(_app: FastAPI) -> Any:
     SessionLocal = get_session_factory()
     with SessionLocal() as db:
         seed_database(db, settings)
+
+    # Enforce the audit retention window once at startup, then daily.
+    from app.services import system_config
+
+    prune_old_events()
+    retention_task = asyncio.create_task(_audit_retention_loop())
 
     # Trigger engine creation early so we fail fast on bad config
     engine = get_engine()
@@ -54,11 +80,17 @@ async def lifespan(_app: FastAPI) -> Any:
             "app_version": settings.app_version,
             "data_dir": str(settings.data_dir),
             "database_url": settings.database_url,
+            "audit_retention_days": system_config.current_retention_days(),
         },
     )
 
     yield
 
+    retention_task.cancel()
+    try:
+        await retention_task
+    except asyncio.CancelledError:
+        pass
     engine.dispose()
     log.info("app_shutdown")
 
@@ -123,6 +155,7 @@ def create_app() -> FastAPI:
     app.include_router(oauth_token_router)
 
     # --- UI routers ---
+    from app.ui.audit_routes import router as ui_audit_router
     from app.ui.auth_routes import router as ui_auth_router
     from app.ui.dependencies import RedirectToLogin, redirect_to_login_handler
     from app.ui.employee_routes import router as ui_employee_router
@@ -135,6 +168,7 @@ def create_app() -> FastAPI:
     app.include_router(ui_employee_router)
     app.include_router(ui_lookup_router)
     app.include_router(ui_settings_router)
+    app.include_router(ui_audit_router)
 
     # Handler that turns the UI's "you need to log in" exception into a 303
     # redirect to the login page with ?next=<original-url>.
