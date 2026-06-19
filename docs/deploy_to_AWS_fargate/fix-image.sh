@@ -26,6 +26,38 @@ error()   { echo -e "${RED}✖  ERROR: $1${NC}" >&2; exit 1; }
 header()  { echo -e "\n${BOLD}${BLUE}── $1 ${NC}"; }
 skip()    { echo -e "  ${YELLOW}↷  Skipping: $1${NC}"; }
 
+# Idempotently ensure a CloudWatch log group exists. Fails loudly if it can't
+# be created — a missing log group makes ECS tasks fail to start (the awslogs
+# driver does NOT auto-create the group), which is hard to diagnose otherwise.
+ensure_log_group() {
+  local group="$1"
+
+  if aws logs describe-log-groups \
+      --log-group-name-prefix "$group" \
+      --region "$REGION" \
+      --query "logGroups[?logGroupName=='${group}'] | [0].logGroupName" \
+      --output text 2>/dev/null | grep -qx "$group"; then
+    return 0
+  fi
+
+  local create_err
+  if ! create_err=$(aws logs create-log-group \
+      --log-group-name "$group" \
+      --region "$REGION" 2>&1); then
+    if echo "$create_err" | grep -q "ResourceAlreadyExistsException"; then
+      return 0
+    fi
+    error "Could not create CloudWatch log group '$group': $create_err"
+  fi
+
+  aws logs describe-log-groups \
+    --log-group-name-prefix "$group" \
+    --region "$REGION" \
+    --query "logGroups[?logGroupName=='${group}'] | [0].logGroupName" \
+    --output text 2>/dev/null | grep -qx "$group" \
+    || error "Log group '$group' still does not exist after creation attempt."
+}
+
 # ── AWS SESSION VALIDATION ────────────────────────────────────────────────────
 header "Validating AWS session"
 
@@ -123,6 +155,13 @@ success "Image pushed to ECR: $ECR_IMAGE"
 
 # ── UPDATE TASK DEFINITION ────────────────────────────────────────────────────
 header "Updating ECS task definition"
+
+# The task def points the awslogs driver at $LOG_GROUP. If that group is missing
+# (e.g. deleted, or never written to state by an older deploy), the task will
+# fail to start with a ResourceNotFoundException. Guarantee it exists first.
+LOG_GROUP="${LOG_GROUP:-/ecs/${APP_NAME}-webapp}"
+ensure_log_group "$LOG_GROUP"
+success "Log group ready: $LOG_GROUP"
 
 log "Registering new task definition with ECR image..."
 aws ecs register-task-definition \
