@@ -103,6 +103,7 @@ For the full UI overview, see [docs/UI.md](docs/UI.md).
 
 | Document | What it covers |
 |---|---|
+| [CHANGELOG.md](CHANGELOG.md) | Notable changes, newest first |
 | [UI.md](docs/UI.md) | Web UI walkthrough, design system, reset feature |
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional and non-functional requirements |
 | [SCHEMA.md](docs/SCHEMA.md) | Database schema, all tables and fields |
