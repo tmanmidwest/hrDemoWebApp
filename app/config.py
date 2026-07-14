@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # --- App metadata ---
     app_name: str = Field(default="Demo HR Source of Truth App")
-    app_version: str = Field(default="0.1.0")
+    app_version: str = Field(default="0.2.0")
 
     # --- Computed paths ---
 

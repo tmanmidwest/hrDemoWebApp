@@ -6,7 +6,7 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
-## [Unreleased] — 2026-07-14
+## [0.2.0] — 2026-07-14
 
 Four features landed in this batch: UI roles, backup/restore, a console-user &
 backup REST API, and least-privilege scopes on API keys. Test suite: 220 passing.
@@ -71,3 +71,9 @@ backup REST API, and least-privilege scopes on API keys. Test suite: 220 passing
 - After a restore you may need to sign in again; a full app restart is recommended so the
   restored session-signing key takes effect.
 - New dependency: `pyzipper` (AES-encrypted zip support for backups).
+
+## [0.1.0] — 2026-06
+
+Initial POC release: employee records, managed lookup tables, REST API for employee CRUD,
+web UI, API key + OAuth 2.0 client-credentials auth, OIDC single sign-on, branding, activity
+log, and reset-data. Deployable via Docker/Compose, Portainer, and AWS ECS Fargate.
