@@ -17,7 +17,7 @@ from app.db import get_db
 from app.models import Country, Employee, StateProvince
 from app.schemas.lookups import CountryCreate, CountryOut, CountryUpdate
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/countries", tags=["lookups"])
 def list_countries(
     is_active: bool | None = None,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> list[Country]:
     """List all countries. Filter by `is_active` if provided."""
     query = db.query(Country)
@@ -41,7 +41,7 @@ def list_countries(
 def get_country(
     country_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> Country:
     country = db.get(Country, country_id)
     if country is None:
@@ -55,7 +55,7 @@ def get_country(
 def create_country(
     body: CountryCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> Country:
     # ISO codes are uppercase by convention
     country = Country(
@@ -95,7 +95,7 @@ def update_country(
     country_id: int,
     body: CountryUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> Country:
     country = db.get(Country, country_id)
     if country is None:
@@ -137,7 +137,7 @@ def update_country(
 def delete_country(
     country_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> None:
     country = db.get(Country, country_id)
     if country is None:

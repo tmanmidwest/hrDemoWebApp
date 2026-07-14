@@ -31,6 +31,9 @@ class ApiKey(Base, TimestampMixin):
     created_by_user_id: Mapped[int] = mapped_column(
         ForeignKey("app_users.id"), nullable=False
     )
+    # Space-separated permission scopes (see app.services.scopes). Pre-scope
+    # keys default to "admin" (full access) so upgrades don't break them.
+    scopes: Mapped[str] = mapped_column(String(500), nullable=False, default="admin")
     last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -43,6 +46,11 @@ class ApiKey(Base, TimestampMixin):
     )
 
     created_by: Mapped[AppUser] = relationship("AppUser")
+
+    @property
+    def scope_set(self) -> set[str]:
+        """The key's granted scopes as a set."""
+        return {tok for tok in self.scopes.split() if tok}
 
     def __repr__(self) -> str:
         return f"<ApiKey id={self.id} name={self.name!r} prefix={self.key_prefix!r}>"

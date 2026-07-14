@@ -26,6 +26,7 @@ from app.models.audit_event import AuditEvent
 from app.models.auth_provider import DEFAULT_SCOPES
 from app.services import backup as backup_service
 from app.services import branding as branding_service
+from app.services import scopes as scope_service
 from app.services import seed_data
 from app.services import system_config
 from app.services.audit import prune_old_events, record_event
@@ -368,6 +369,72 @@ def delete_admin(
     return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
 
 
+@router.post("/admin-users/{user_id}/disable")
+def disable_admin(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    target = db.get(AppUser, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.is_seeded:
+        flash(request, "The seeded admin cannot be disabled.", "error")
+        return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+    if target.id == user.id:
+        flash(request, "You cannot disable your own account.", "error")
+        return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+    if target.is_active:
+        target.is_active = False
+        db.commit()
+        log.info(
+            "ui_user_disabled",
+            extra={"target_user_id": target.id, "target_username": target.username, "by": user.username},
+        )
+        _settings_event(
+            request, user,
+            category="admin_user",
+            event_type="admin_user.disabled",
+            target_type="app_user",
+            target_id=target.id,
+            target_label=target.username,
+            message=f"Disabled user '{target.username}'",
+        )
+        flash(request, f"Disabled user '{target.username}'.", "success")
+    return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+
+
+@router.post("/admin-users/{user_id}/enable")
+def enable_admin(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    target = db.get(AppUser, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if not target.is_active:
+        target.is_active = True
+        db.commit()
+        log.info(
+            "ui_user_enabled",
+            extra={"target_user_id": target.id, "target_username": target.username, "by": user.username},
+        )
+        _settings_event(
+            request, user,
+            category="admin_user",
+            event_type="admin_user.enabled",
+            target_type="app_user",
+            target_id=target.id,
+            target_label=target.username,
+            message=f"Enabled user '{target.username}'",
+        )
+        flash(request, f"Enabled user '{target.username}'.", "success")
+    return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+
+
 # ===========================================================================
 # API Keys
 # ===========================================================================
@@ -402,6 +469,9 @@ def show_new_api_key(
         "settings/api_key_new.html",
         current_user=user,
         active_subsection="api_keys",
+        scope_catalog=scope_service.SCOPES,
+        scope_presets=scope_service.PRESETS,
+        form={"scopes": scope_service.PRESETS["Employee Management"]},
     )
 
 
@@ -409,21 +479,37 @@ def show_new_api_key(
 def create_api_key(
     request: Request,
     name: str = Form(...),
+    scopes: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
 ) -> Response:
+    granted = scope_service.validate(scopes)
+    if not granted:
+        return render(
+            request,
+            "settings/api_key_new.html",
+            current_user=user,
+            active_subsection="api_keys",
+            scope_catalog=scope_service.SCOPES,
+            scope_presets=scope_service.PRESETS,
+            form={"name": name.strip(), "scopes": []},
+            error="Select at least one permission for this key.",
+        )
+
     full_key, prefix = generate_api_key()
     key = ApiKey(
         name=name.strip(),
         key_prefix=prefix,
         key_hash=hash_token(full_key),
         created_by_user_id=user.id,
+        scopes=scope_service.serialize(granted),
     )
     db.add(key)
     db.commit()
     log.info(
         "ui_api_key_created",
-        extra={"api_key_id": key.id, "key_name": key.name, "prefix": prefix, "by": user.username},
+        extra={"api_key_id": key.id, "key_name": key.name, "prefix": prefix,
+               "scopes": key.scopes, "by": user.username},
     )
     _settings_event(
         request, user,
@@ -433,7 +519,7 @@ def create_api_key(
         target_id=key.id,
         target_label=key.name,
         message=f"Created API key '{key.name}'",
-        detail={"prefix": prefix},
+        detail={"prefix": prefix, "scopes": granted},
     )
     # Stash the full key in session so the list page can reveal it once
     request.session["_revealed_api_key"] = full_key

@@ -24,7 +24,7 @@ from app.schemas.lookups import (
     EmploymentStatusUpdate,
 )
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ router = APIRouter(prefix="/employment-statuses", tags=["lookups"])
 def list_statuses(
     is_active_status: bool | None = None,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> list[EmploymentStatus]:
     query = db.query(EmploymentStatus)
     if is_active_status is not None:
@@ -47,7 +47,7 @@ def list_statuses(
 def get_status(
     status_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> EmploymentStatus:
     s = db.get(EmploymentStatus, status_id)
     if s is None:
@@ -61,7 +61,7 @@ def get_status(
 def create_status(
     body: EmploymentStatusCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> EmploymentStatus:
     new_status = EmploymentStatus(
         label=body.label,
@@ -101,7 +101,7 @@ def update_status(
     status_id: int,
     body: EmploymentStatusUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> EmploymentStatus:
     s = db.get(EmploymentStatus, status_id)
     if s is None:
@@ -152,7 +152,7 @@ def update_status(
 def delete_status(
     status_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> None:
     s = db.get(EmploymentStatus, status_id)
     if s is None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Session login (UI)
@@ -40,10 +40,15 @@ class SessionInfoResponse(BaseModel):
 
 
 class ApiKeyCreate(BaseModel):
-    """Request body for creating a new API key."""
+    """Request body for creating a new API key.
+
+    `scopes` limits what the key can do (see app.services.scopes). When omitted,
+    the key is created with full access (`["admin"]`) for backward compatibility.
+    """
 
     name: str = Field(min_length=1, max_length=200)
     expires_at: datetime | None = None
+    scopes: list[str] | None = None
 
 
 class ApiKeyCreateResponse(BaseModel):
@@ -57,6 +62,7 @@ class ApiKeyCreateResponse(BaseModel):
     name: str
     key: str  # The full plaintext key — shown only at creation time
     key_prefix: str
+    scopes: list[str]
     created_at: datetime
     expires_at: datetime | None
 
@@ -69,11 +75,20 @@ class ApiKeyOut(BaseModel):
     id: int
     name: str
     key_prefix: str
+    scopes: list[str] = Field(default_factory=list)
     created_at: datetime
     last_used_at: datetime | None
     last_used_ip: str | None
     revoked_at: datetime | None
     expires_at: datetime | None
+
+    @field_validator("scopes", mode="before")
+    @classmethod
+    def _split_scopes(cls, v: object) -> object:
+        """Accept the ORM's space-separated string and expose it as a list."""
+        if isinstance(v, str):
+            return v.split()
+        return v
 
 
 # ---------------------------------------------------------------------------

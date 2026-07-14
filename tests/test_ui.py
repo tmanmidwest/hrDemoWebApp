@@ -208,24 +208,37 @@ def test_create_admin_with_short_password_rejected(ui_session: TestClient) -> No
 
 
 def test_create_api_key_shows_secret_once(ui_session: TestClient) -> None:
-    # Create
+    # Create (scopes are required — send two)
     resp = ui_session.post(
         "/ui/settings/api-keys/new",
-        data={"name": "Test Key from UI"},
+        data={"name": "Test Key from UI", "scopes": ["employees:read", "employees:write"]},
         follow_redirects=False,
     )
     assert resp.status_code == 303
 
-    # Land on list — should show the secret-reveal block
+    # Land on list — should show the secret-reveal block and the scope badges
     list_resp = ui_session.get("/ui/settings/api-keys")
     assert "Test Key from UI" in list_resp.text
     assert "hrsot_" in list_resp.text  # Full key still visible once
+    assert "employees:read" in list_resp.text
+    assert "employees:write" in list_resp.text
 
     # Visit again — secret should be gone (one-shot reveal)
     list_resp2 = ui_session.get("/ui/settings/api-keys")
     assert "Test Key from UI" in list_resp2.text
     # The secret-reveal box should not appear
     assert "copy it now" not in list_resp2.text
+
+
+def test_create_api_key_without_scopes_rejected(ui_session: TestClient) -> None:
+    resp = ui_session.post(
+        "/ui/settings/api-keys/new",
+        data={"name": "No Scopes"},
+        follow_redirects=False,
+    )
+    # Re-renders the form with an error rather than creating the key.
+    assert resp.status_code == 200
+    assert "at least one permission" in resp.text
 
 
 def test_create_oauth_client_shows_credentials_once(ui_session: TestClient) -> None:

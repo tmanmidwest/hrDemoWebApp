@@ -13,7 +13,7 @@ from app.db import get_db
 from app.models import Employee, Location
 from app.schemas.lookups import LocationCreate, LocationOut, LocationUpdate
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/locations", tags=["lookups"])
 def list_locations(
     is_active: bool | None = None,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> list[Location]:
     query = db.query(Location)
     if is_active is not None:
@@ -36,7 +36,7 @@ def list_locations(
 def get_location(
     location_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> Location:
     loc = db.get(Location, location_id)
     if loc is None:
@@ -50,7 +50,7 @@ def get_location(
 def create_location(
     body: LocationCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> Location:
     loc = Location(name=body.name, is_active=body.is_active)
     db.add(loc)
@@ -85,7 +85,7 @@ def update_location(
     location_id: int,
     body: LocationUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> Location:
     loc = db.get(Location, location_id)
     if loc is None:
@@ -125,7 +125,7 @@ def update_location(
 def delete_location(
     location_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> None:
     loc = db.get(Location, location_id)
     if loc is None:

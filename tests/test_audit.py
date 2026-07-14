@@ -148,7 +148,10 @@ def test_oauth_token_denied_is_recorded(client: TestClient) -> None:
 
 def test_category_filter(ui_session: TestClient) -> None:
     # Generate a non-auth event.
-    ui_session.post("/ui/settings/api-keys/new", data={"name": "Filter Key"})
+    ui_session.post(
+        "/ui/settings/api-keys/new",
+        data={"name": "Filter Key", "scopes": ["employees:read"]},
+    )
     auth_only = _events(ui_session, "?category=auth")
     assert auth_only and all(r["category"] == "auth" for r in auth_only)
     keys_only = _events(ui_session, "?category=api_key")
@@ -156,7 +159,10 @@ def test_category_filter(ui_session: TestClient) -> None:
 
 
 def test_view_groups_identity_categories(ui_session: TestClient) -> None:
-    ui_session.post("/ui/settings/api-keys/new", data={"name": "Grouped Key"})
+    ui_session.post(
+        "/ui/settings/api-keys/new",
+        data={"name": "Grouped Key", "scopes": ["employees:read"]},
+    )
     identity = _events(ui_session, "?view=identity")
     assert identity, "identity view should include the login event"
     assert all(r["category"] in ("auth", "oauth", "oidc") for r in identity)
@@ -353,7 +359,10 @@ def test_retention_zero_disables_pruning_end_to_end(ui_session: TestClient) -> N
 
 def test_reset_can_clear_audit_log_and_logs_itself(ui_session: TestClient) -> None:
     # Seed a couple of events first.
-    ui_session.post("/ui/settings/api-keys/new", data={"name": "Pre-reset Key"})
+    ui_session.post(
+        "/ui/settings/api-keys/new",
+        data={"name": "Pre-reset Key", "scopes": ["employees:read"]},
+    )
     assert len(_events(ui_session)) > 0
 
     resp = ui_session.post(

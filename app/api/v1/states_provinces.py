@@ -21,7 +21,7 @@ from app.schemas.lookups import (
     StateProvinceUpdate,
 )
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def list_states(
     country_id: int | None = None,
     is_active: bool | None = None,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> list[StateProvince]:
     """List states/provinces. Filter by `country_id` to populate dependent dropdowns."""
     query = db.query(StateProvince)
@@ -56,7 +56,7 @@ def list_states(
 def get_state(
     state_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> StateProvince:
     state = db.get(StateProvince, state_id)
     if state is None:
@@ -70,7 +70,7 @@ def get_state(
 def create_state(
     body: StateProvinceCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> StateProvince:
     _validate_country_exists(db, body.country_id)
     state = StateProvince(
@@ -111,7 +111,7 @@ def update_state(
     state_id: int,
     body: StateProvinceUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> StateProvince:
     state = db.get(StateProvince, state_id)
     if state is None:
@@ -153,7 +153,7 @@ def update_state(
 def delete_state(
     state_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> None:
     state = db.get(StateProvince, state_id)
     if state is None:

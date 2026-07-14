@@ -35,6 +35,21 @@ def test_create_api_key_returns_full_key_once(logged_in_client: TestClient) -> N
     assert body["key"].startswith("hrsot_")
     assert len(body["key"]) > 20
     assert body["key_prefix"] == body["key"][:14]
+    # Omitting scopes yields a full-access key (backward compatible).
+    assert body["scopes"] == ["admin"]
+
+
+def test_create_api_key_with_scopes(logged_in_client: TestClient) -> None:
+    resp = logged_in_client.post(
+        "/api/v1/auth/api-keys/",
+        json={"name": "Scoped", "scopes": ["employees:read", "employees:write"]},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["scopes"] == ["employees:read", "employees:write"]
+    # And the list endpoint surfaces them too.
+    listed = logged_in_client.get("/api/v1/auth/api-keys/").json()
+    scoped = next(k for k in listed if k["name"] == "Scoped")
+    assert scoped["scopes"] == ["employees:read", "employees:write"]
 
 
 def test_list_api_keys_does_not_include_secret(logged_in_client: TestClient) -> None:

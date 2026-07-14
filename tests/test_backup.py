@@ -235,3 +235,30 @@ def test_restore_via_route_reverts_and_stays_healthy(client: TestClient) -> None
     assert _country_count("Atlantis") == 0
     assert client.get("/health").json()["database"] == "ok"
     assert client.get("/ui/settings/backup").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Backup export API (bearer auth)
+# ---------------------------------------------------------------------------
+
+
+def test_backup_api_requires_auth(client: TestClient) -> None:
+    assert client.post("/api/v1/backup").status_code == 401
+
+
+def test_backup_api_returns_zip(api_client: TestClient) -> None:
+    resp = api_client.post("/api/v1/backup")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        assert "hrsot.db" in zf.namelist()
+
+
+def test_backup_api_encrypts_with_password(api_client: TestClient) -> None:
+    resp = api_client.post("/api/v1/backup", json={"password": PASSWORD})
+    assert resp.status_code == 200
+    with pyzipper.AESZipFile(io.BytesIO(resp.content)) as zf:
+        with pytest.raises(RuntimeError):
+            zf.read("hrsot.db")
+        zf.setpassword(PASSWORD.encode())
+        assert zf.read("hrsot.db").startswith(b"SQLite format 3")

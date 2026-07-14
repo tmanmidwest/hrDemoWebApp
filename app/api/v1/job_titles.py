@@ -13,7 +13,7 @@ from app.db import get_db
 from app.models import Department, Employee, JobTitle
 from app.schemas.lookups import JobTitleCreate, JobTitleOut, JobTitleUpdate
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ def list_job_titles(
     department_id: int | None = None,
     is_active: bool | None = None,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> list[JobTitle]:
     query = db.query(JobTitle)
     if department_id is not None:
@@ -47,7 +47,7 @@ def list_job_titles(
 def get_job_title(
     title_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> JobTitle:
     title = db.get(JobTitle, title_id)
     if title is None:
@@ -61,7 +61,7 @@ def get_job_title(
 def create_job_title(
     body: JobTitleCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> JobTitle:
     _validate_department_exists(db, body.department_id)
     title = JobTitle(
@@ -101,7 +101,7 @@ def update_job_title(
     title_id: int,
     body: JobTitleUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> JobTitle:
     title = db.get(JobTitle, title_id)
     if title is None:
@@ -143,7 +143,7 @@ def update_job_title(
 def delete_job_title(
     title_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> None:
     title = db.get(JobTitle, title_id)
     if title is None:

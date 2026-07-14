@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import ApiKey, AppUser
 from app.schemas.auth import ApiKeyCreate, ApiKeyCreateResponse, ApiKeyOut
+from app.services import scopes as scope_service
 from app.services.auth import get_current_user
 from app.services.tokens import generate_api_key, hash_token
 
@@ -49,6 +50,17 @@ def create_api_key(
     The full key value is returned in this response ONCE and never shown again.
     Only the SHA-256 hash and first 8 chars are stored.
     """
+    # Default to full access when scopes are omitted (backward compatible).
+    if body.scopes is None:
+        granted = [scope_service.ADMIN]
+    else:
+        granted = scope_service.validate(body.scopes)
+        if not granted:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="No valid scopes provided.",
+            )
+
     full_key, prefix = generate_api_key()
     api_key = ApiKey(
         name=body.name,
@@ -56,6 +68,7 @@ def create_api_key(
         key_hash=hash_token(full_key),
         created_by_user_id=user.id,
         expires_at=body.expires_at,
+        scopes=scope_service.serialize(granted),
     )
     db.add(api_key)
     db.commit()
@@ -67,6 +80,7 @@ def create_api_key(
             "api_key_id": api_key.id,
             "key_name": api_key.name,
             "prefix": prefix,
+            "scopes": api_key.scopes,
             "created_by": user.username,
         },
     )
@@ -75,6 +89,7 @@ def create_api_key(
         name=api_key.name,
         key=full_key,
         key_prefix=prefix,
+        scopes=api_key.scopes.split(),
         created_at=api_key.created_at,
         expires_at=api_key.expires_at,
     )

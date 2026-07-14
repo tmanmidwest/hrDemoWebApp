@@ -259,6 +259,59 @@ def test_cannot_change_seeded_admin_role(admin_client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Enable / disable (UI)
+# ---------------------------------------------------------------------------
+
+
+def _user_by_name(username: str):
+    from app.db import get_session_factory
+    from app.models import AppUser
+
+    SessionLocal = get_session_factory()
+    with SessionLocal() as db:
+        return db.query(AppUser).filter(AppUser.username == username).one()
+
+
+def test_admin_can_disable_and_enable_user(admin_client: TestClient) -> None:
+    _create_local_user("toggleme", "view_only")
+    uid = _user_by_name("toggleme").id
+
+    resp = admin_client.post(
+        f"/ui/settings/admin-users/{uid}/disable", follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert _user_by_name("toggleme").is_active is False
+
+    resp = admin_client.post(
+        f"/ui/settings/admin-users/{uid}/enable", follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert _user_by_name("toggleme").is_active is True
+
+
+def test_cannot_disable_seeded_admin_via_ui(admin_client: TestClient) -> None:
+    seeded_id = _user_by_name("robbytheadmin").id
+    admin_client.post(
+        f"/ui/settings/admin-users/{seeded_id}/disable", follow_redirects=False
+    )
+    assert _user_by_name("robbytheadmin").is_active is True
+
+
+def test_cannot_disable_self_via_ui(client: TestClient) -> None:
+    # A second admin who is not the seeded account.
+    _create_local_user("otheradmin", "admin")
+    resp = client.post(
+        "/ui/login",
+        data={"username": "otheradmin", "password": PASSWORD},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    uid = _user_by_name("otheradmin").id
+    client.post(f"/ui/settings/admin-users/{uid}/disable", follow_redirects=False)
+    assert _user_by_name("otheradmin").is_active is True
+
+
+# ---------------------------------------------------------------------------
 # SSO provisioning default
 # ---------------------------------------------------------------------------
 

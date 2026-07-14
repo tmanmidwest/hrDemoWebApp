@@ -13,7 +13,7 @@ from app.db import get_db
 from app.models import Department, Employee, JobTitle
 from app.schemas.lookups import DepartmentCreate, DepartmentOut, DepartmentUpdate
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/departments", tags=["lookups"])
 def list_departments(
     is_active: bool | None = None,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> list[Department]:
     query = db.query(Department)
     if is_active is not None:
@@ -36,7 +36,7 @@ def list_departments(
 def get_department(
     dept_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("lookups:read")),
 ) -> Department:
     dept = db.get(Department, dept_id)
     if dept is None:
@@ -50,7 +50,7 @@ def get_department(
 def create_department(
     body: DepartmentCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> Department:
     dept = Department(name=body.name, is_active=body.is_active)
     db.add(dept)
@@ -85,7 +85,7 @@ def update_department(
     dept_id: int,
     body: DepartmentUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> Department:
     dept = db.get(Department, dept_id)
     if dept is None:
@@ -125,7 +125,7 @@ def update_department(
 def delete_department(
     dept_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("lookups:write")),
 ) -> None:
     dept = db.get(Department, dept_id)
     if dept is None:

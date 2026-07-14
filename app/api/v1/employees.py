@@ -27,7 +27,7 @@ from app.db import get_db
 from app.models import Employee, EmploymentStatus
 from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
 from app.services.audit import principal_actor, record_event
-from app.services.auth import Principal, get_authenticated_principal
+from app.services.auth import Principal, require_scope
 from app.services.employee_validation import (
     resolve_employment_status_by_value,
     validate_country_id,
@@ -115,7 +115,7 @@ def list_employees(
     ),
     order: Literal["asc", "desc"] = Query(default="asc"),
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("employees:read")),
 ) -> list[Employee]:
     if sort not in SORTABLE_FIELDS:
         raise HTTPException(
@@ -181,7 +181,7 @@ def list_employees(
 def get_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    _principal: Principal = Depends(get_authenticated_principal),
+    _principal: Principal = Depends(require_scope("employees:read")),
 ) -> Employee:
     employee = db.get(Employee, employee_id)
     if employee is None:
@@ -200,7 +200,7 @@ def get_employee(
 def create_employee(
     body: EmployeeCreate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("employees:write")),
 ) -> Employee:
     # Validate all FKs and cross-FK rules
     validate_country_id(db, body.country_id)
@@ -279,7 +279,7 @@ def update_employee(
     employee_id: int,
     body: EmployeeUpdate,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("employees:write")),
 ) -> Employee:
     employee = db.get(Employee, employee_id)
     if employee is None:
@@ -391,7 +391,7 @@ def update_employee(
 def archive_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("employees:write")),
 ) -> Employee:
     """Soft-delete an employee. The record stays in the database but is hidden
     from default list views and excluded from supervisor pickers.
@@ -428,7 +428,7 @@ def archive_employee(
 def restore_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("employees:write")),
 ) -> Employee:
     """Restore an archived employee. Reverses /archive."""
     employee = db.get(Employee, employee_id)
@@ -524,7 +524,7 @@ def terminate_employee(
     employee_id: int,
     body: TerminateRequest | None = None,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("employees:write")),
 ) -> Employee:
     """Mark an employee as terminated.
 
@@ -604,7 +604,7 @@ def reactivate_employee(
     employee_id: int,
     body: ReactivateRequest | None = None,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(get_authenticated_principal),
+    principal: Principal = Depends(require_scope("employees:write")),
 ) -> Employee:
     """Reverse a termination — set status back to Active and clear the
     termination date.

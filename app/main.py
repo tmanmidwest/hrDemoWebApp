@@ -126,6 +126,7 @@ def create_app() -> FastAPI:
 
     # --- Routers ---
     from app.api.v1.api_keys import router as api_keys_router
+    from app.api.v1.backup import router as backup_router
     from app.api.v1.countries import router as countries_router
     from app.api.v1.departments import router as departments_router
     from app.api.v1.employees import router as employees_router
@@ -136,11 +137,16 @@ def create_app() -> FastAPI:
     from app.api.v1.oauth_token import router as oauth_token_router
     from app.api.v1.session_auth import router as session_auth_router
     from app.api.v1.states_provinces import router as states_provinces_router
+    from app.api.v1.users import router as users_router
 
     # /api/v1/auth/* (session login, API keys, OAuth client management)
     app.include_router(session_auth_router, prefix="/api/v1")
     app.include_router(api_keys_router, prefix="/api/v1")
     app.include_router(oauth_clients_router, prefix="/api/v1")
+
+    # /api/v1/users (console account management) and /api/v1/backup (export)
+    app.include_router(users_router, prefix="/api/v1")
+    app.include_router(backup_router, prefix="/api/v1")
 
     # /api/v1/* (lookup tables and employees)
     app.include_router(countries_router, prefix="/api/v1")

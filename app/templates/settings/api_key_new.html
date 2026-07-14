@@ -10,17 +10,51 @@
 <div class="page-header">
   <div class="page-header__text">
     <h1 class="page-header__title">New API Key</h1>
-    <p class="page-header__subtitle">A label-only field, used to identify the integration this key belongs to.</p>
+    <p class="page-header__subtitle">Grant only the permissions this integration needs.</p>
   </div>
 </div>
 
-<form method="post" action="/ui/settings/api-keys/new" class="card" style="max-width: 480px;">
+{% if error %}<div class="inline-error">{{ error }}</div>{% endif %}
+
+{% set selected = form.scopes if form and form.scopes else [] %}
+
+<form method="post" action="/ui/settings/api-keys/new" class="card" style="max-width: 560px;">
   <div class="card__body">
     <div class="form-row">
       <label class="label" for="name">Name<span class="label__required">*</span></label>
       <input class="input" id="name" name="name" required maxlength="100" autofocus
-             placeholder="e.g. Saviynt Production Connector" />
+             value="{{ form.name or '' }}" placeholder="e.g. Saviynt Production Connector" />
       <div class="form-hint">Used only as a label; helps you identify which key belongs to which system.</div>
+    </div>
+
+    <div class="form-row">
+      <label class="label">Permissions<span class="label__required">*</span></label>
+      <div class="form-hint" style="margin-bottom: var(--s-3);">Quick presets:
+        {% for preset_name, preset_scopes in scope_presets.items() %}
+        <button type="button" class="btn btn--ghost btn--sm js-scope-preset"
+                data-scopes="{{ preset_scopes | join(' ') }}">{{ preset_name }}</button>
+        {% endfor %}
+      </div>
+
+      <div id="scope-list" style="display:flex; flex-direction:column; gap: var(--s-2);
+           border:1px solid var(--line); border-radius: var(--r-md); padding: var(--s-4);">
+        {% set ns = namespace(group=None) %}
+        {% for s in scope_catalog %}
+          {% if s.group != ns.group %}
+          {% set ns.group = s.group %}
+          <div class="text-xs text-faint" style="margin-top: var(--s-2); text-transform:uppercase; letter-spacing:.04em;">{{ s.group }}</div>
+          {% endif %}
+          <label class="checkbox-row" style="padding: var(--s-1) 0;">
+            <input type="checkbox" name="scopes" value="{{ s.value }}"
+                   {% if s.value in selected %}checked{% endif %} />
+            <span>
+              <strong class="mono text-xs">{{ s.value }}</strong>
+              <div class="text-xs text-muted">{{ s.description }}</div>
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+      <div class="form-hint"><span class="mono">admin</span> grants full access to every API-authorized endpoint.</div>
     </div>
   </div>
   <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
@@ -28,4 +62,16 @@
     <button type="submit" class="btn btn--primary">Create key</button>
   </div>
 </form>
+
+<script>
+  // Preset buttons tick the matching scope checkboxes (replacing the selection).
+  document.querySelectorAll('.js-scope-preset').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var wanted = (btn.dataset.scopes || '').split(/\s+/).filter(Boolean);
+      document.querySelectorAll('#scope-list input[name="scopes"]').forEach(function (cb) {
+        cb.checked = wanted.indexOf(cb.value) !== -1;
+      });
+    });
+  });
+</script>
 {% endblock %}

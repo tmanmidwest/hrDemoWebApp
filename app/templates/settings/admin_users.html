@@ -54,6 +54,16 @@
       <td class="table__actions">
         <a href="/ui/settings/admin-users/{{ u.id }}/password" class="btn btn--ghost btn--sm">Change Password</a>
         {% if not u.is_seeded and u.id != current_user.id %}
+        {% if u.is_active %}
+        <form action="/ui/settings/admin-users/{{ u.id }}/disable" method="post" style="margin:0;"
+              onsubmit="return confirm('Disable user {{ u.username }}? They will not be able to sign in.');">
+          <button type="submit" class="btn btn--ghost btn--sm">Disable</button>
+        </form>
+        {% else %}
+        <form action="/ui/settings/admin-users/{{ u.id }}/enable" method="post" style="margin:0;">
+          <button type="submit" class="btn btn--ghost btn--sm">Enable</button>
+        </form>
+        {% endif %}
         <form action="/ui/settings/admin-users/{{ u.id }}/delete" method="post" style="margin:0;"
               onsubmit="return confirm('Delete user {{ u.username }}? They will not be able to log in.');">
           <button type="submit" class="btn btn--ghost btn--sm" style="color: var(--danger);">Delete</button>

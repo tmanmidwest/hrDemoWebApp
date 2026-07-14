@@ -20,6 +20,7 @@ care which method the caller used.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -29,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import ApiKey, AppUser, OAuthClient
+from app.services import scopes as scope_service
 from app.services.jwt_tokens import JWTValidationError, validate_access_token
 from app.services.tokens import API_KEY_PREFIX, hash_token
 
@@ -54,6 +56,9 @@ class Principal:
     kind: PrincipalKind
     api_key: ApiKey | None = None
     oauth_client: OAuthClient | None = None
+    # Granted permission scopes. API keys carry their own; OAuth clients get the
+    # `admin` wildcard (full access) until OAuth-client scoping is added.
+    scopes: frozenset[str] = frozenset()
 
     @property
     def identifier(self) -> str:
@@ -63,6 +68,10 @@ class Principal:
         if self.kind == PrincipalKind.OAUTH and self.oauth_client is not None:
             return f"oauth:{self.oauth_client.client_id}"
         return "unknown"
+
+    def has_scope(self, required: str) -> bool:
+        """True if this principal is allowed the `required` scope."""
+        return scope_service.has_scope(self.scopes, required)
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +249,11 @@ def get_authenticated_principal(
             "auth_success",
             extra={"method": "api_key", "principal": f"api_key:{api_key.key_prefix}"},
         )
-        return Principal(kind=PrincipalKind.API_KEY, api_key=api_key)
+        return Principal(
+            kind=PrincipalKind.API_KEY,
+            api_key=api_key,
+            scopes=frozenset(api_key.scope_set),
+        )
 
     # Then try JWT
     oauth_client = _validate_jwt(token, db, client_ip)
@@ -249,7 +262,12 @@ def get_authenticated_principal(
             "auth_success",
             extra={"method": "oauth", "principal": f"oauth:{oauth_client.client_id}"},
         )
-        return Principal(kind=PrincipalKind.OAUTH, oauth_client=oauth_client)
+        # OAuth-client tokens retain full access until scoping is added for them.
+        return Principal(
+            kind=PrincipalKind.OAUTH,
+            oauth_client=oauth_client,
+            scopes=frozenset({scope_service.ADMIN}),
+        )
 
     # Token didn't match either pattern
     raise HTTPException(
@@ -257,3 +275,28 @@ def get_authenticated_principal(
         detail="Token format not recognized. Expected an API key or JWT.",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+# ---------------------------------------------------------------------------
+# Scope enforcement
+# ---------------------------------------------------------------------------
+
+
+def require_scope(scope: str) -> Callable[[Principal], Principal]:
+    """Build a dependency that requires `scope` on the authenticated principal.
+
+    Returns the Principal on success (so write endpoints keep it for auditing);
+    raises 403 when the caller's token lacks the scope.
+    """
+
+    def _dependency(
+        principal: Principal = Depends(get_authenticated_principal),
+    ) -> Principal:
+        if not principal.has_scope(scope):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"This API key lacks the required scope: {scope}",
+            )
+        return principal
+
+    return _dependency
