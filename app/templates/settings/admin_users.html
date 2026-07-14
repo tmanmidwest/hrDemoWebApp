@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% set page_title = "Admin Users" %}
-{% block breadcrumb %}<span>Settings</span> <span class="topbar__breadcrumb-sep">/</span> <span>Admin Users</span>{% endblock %}
+{% set page_title = "Users" %}
+{% block breadcrumb %}<span>Settings</span> <span class="topbar__breadcrumb-sep">/</span> <span>Users</span>{% endblock %}
 
 {% block main %}
 <div class="page-header">
   <div class="page-header__text">
-    <h1 class="page-header__title">Admin Users</h1>
-    <p class="page-header__subtitle">Accounts that can sign in to this UI.</p>
+    <h1 class="page-header__title">Users</h1>
+    <p class="page-header__subtitle">Accounts that can sign in to this UI, and the role that governs what they can do.</p>
   </div>
   <div class="page-header__actions">
-    <a href="/ui/settings/admin-users/new" class="btn btn--primary">+ Add Admin</a>
+    <a href="/ui/settings/admin-users/new" class="btn btn--primary">+ Add User</a>
   </div>
 </div>
 
@@ -19,6 +19,7 @@
   <thead>
     <tr>
       <th>Username</th>
+      <th>Role</th>
       <th>Status</th>
       <th>Created</th>
       <th>Last login</th>
@@ -30,6 +31,21 @@
     <tr>
       <td>{{ u.username }} {% if u.is_seeded %}<span class="badge badge--neutral text-xs">Seeded</span>{% endif %}</td>
       <td>
+        {% if u.is_seeded or u.id == current_user.id %}
+          <span class="badge badge--neutral">{{ u.role_label }}</span>
+        {% else %}
+          <form action="/ui/settings/admin-users/{{ u.id }}/role" method="post"
+                style="margin:0; display:flex; gap: var(--s-2); align-items:center;">
+            <select name="role" class="select" style="width:auto; padding-top: 4px; padding-bottom: 4px;" onchange="this.form.requestSubmit();">
+              {% for value, label in role_choices %}
+              <option value="{{ value }}" {% if u.role == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <noscript><button type="submit" class="btn btn--ghost btn--sm">Save</button></noscript>
+          </form>
+        {% endif %}
+      </td>
+      <td>
         {% if u.is_active %}<span class="badge badge--success">Active</span>
         {% else %}<span class="badge badge--neutral">Disabled</span>{% endif %}
       </td>
@@ -39,7 +55,7 @@
         <a href="/ui/settings/admin-users/{{ u.id }}/password" class="btn btn--ghost btn--sm">Change Password</a>
         {% if not u.is_seeded and u.id != current_user.id %}
         <form action="/ui/settings/admin-users/{{ u.id }}/delete" method="post" style="margin:0;"
-              onsubmit="return confirm('Delete admin {{ u.username }}? They will not be able to log in.');">
+              onsubmit="return confirm('Delete user {{ u.username }}? They will not be able to log in.');">
           <button type="submit" class="btn btn--ghost btn--sm" style="color: var(--danger);">Delete</button>
         </form>
         {% endif %}

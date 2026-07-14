@@ -20,7 +20,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import AppUser, AuthProvider, UserIdentity
+from app.models import AppUser, AuthProvider, UserIdentity, UserRole
 from app.services.audit import record_event
 from app.services.secret_box import decrypt_secret
 
@@ -127,6 +127,8 @@ def find_or_create_user(
     user = AppUser(
         username=username,
         password_hash=None,
+        # SSO users start read-only; an admin promotes them as needed.
+        role=UserRole.VIEW_ONLY.value,
         is_active=True,
         is_seeded=False,
         last_login_at=now,

@@ -6,16 +6,25 @@ import logging
 import re
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import ApiKey, AppBranding, AppUser, AuthProvider, OAuthClient, UserIdentity
+from app.models import (
+    ApiKey,
+    AppBranding,
+    AppUser,
+    AuthProvider,
+    OAuthClient,
+    UserIdentity,
+    UserRole,
+)
 from app.models.app_branding import BRANDING_ID
 from app.models.audit_event import AuditEvent
 from app.models.auth_provider import DEFAULT_SCOPES
+from app.services import backup as backup_service
 from app.services import branding as branding_service
 from app.services import seed_data
 from app.services import system_config
@@ -29,7 +38,7 @@ from app.services.tokens import (
     generate_oauth_client_secret,
     hash_token,
 )
-from app.ui.dependencies import require_ui_user
+from app.ui.dependencies import require_admin
 from app.ui.flash import flash
 from app.ui.templating import render
 
@@ -39,6 +48,14 @@ _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ui/settings", tags=["ui"], include_in_schema=False)
+
+# Roles offered in the create/edit-user forms, in display order.
+ROLE_CHOICES = [
+    (UserRole.ADMIN.value, "Admin"),
+    (UserRole.MANAGEMENT.value, "Management"),
+    (UserRole.VIEW_ONLY.value, "View Only"),
+]
+_VALID_ROLES = {value for value, _ in ROLE_CHOICES}
 
 
 def _settings_event(
@@ -70,7 +87,27 @@ def _settings_event(
 
 
 # ===========================================================================
-# Admin users
+# Settings index
+# ===========================================================================
+
+
+@router.get("")
+@router.get("/")
+def settings_index(
+    request: Request,
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    """Landing page linking to each settings area (admin only)."""
+    return render(
+        request,
+        "settings/index.html",
+        current_user=user,
+        active_section="settings",
+    )
+
+
+# ===========================================================================
+# Users
 # ===========================================================================
 
 
@@ -78,7 +115,7 @@ def _settings_event(
 def list_admins(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     users = db.query(AppUser).order_by(AppUser.username).all()
     return render(
@@ -87,20 +124,22 @@ def list_admins(
         current_user=user,
         active_subsection="admin_users",
         users=users,
+        role_choices=ROLE_CHOICES,
     )
 
 
 @router.get("/admin-users/new")
 def show_new_admin(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
         "settings/admin_user_new.html",
         current_user=user,
         active_subsection="admin_users",
-        form={},
+        form={"role": UserRole.VIEW_ONLY.value},
+        role_choices=ROLE_CHOICES,
     )
 
 
@@ -109,23 +148,29 @@ def create_admin(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    role: str = Form(UserRole.VIEW_ONLY.value),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     username = username.strip()
+    # Fall back to the least-privileged role for any unrecognized value.
+    if role not in _VALID_ROLES:
+        role = UserRole.VIEW_ONLY.value
     if len(password) < 8:
         return render(
             request,
             "settings/admin_user_new.html",
             current_user=user,
             active_subsection="admin_users",
-            form={"username": username},
+            form={"username": username, "role": role},
+            role_choices=ROLE_CHOICES,
             error="Password must be at least 8 characters.",
         )
 
     new_user = AppUser(
         username=username,
         password_hash=hash_password(password),
+        role=role,
         is_active=True,
         is_seeded=False,
     )
@@ -139,12 +184,18 @@ def create_admin(
             "settings/admin_user_new.html",
             current_user=user,
             active_subsection="admin_users",
-            form={"username": username},
+            form={"username": username, "role": role},
+            role_choices=ROLE_CHOICES,
             error=f"Username '{username}' is already taken.",
         )
     log.info(
         "ui_admin_created",
-        extra={"target_user_id": new_user.id, "target_username": username, "by": user.username},
+        extra={
+            "target_user_id": new_user.id,
+            "target_username": username,
+            "role": role,
+            "by": user.username,
+        },
     )
     _settings_event(
         request, user,
@@ -153,9 +204,62 @@ def create_admin(
         target_type="app_user",
         target_id=new_user.id,
         target_label=username,
-        message=f"Created admin user '{username}'",
+        message=f"Created user '{username}' ({new_user.role_label})",
+        detail={"role": role},
     )
-    flash(request, f"Admin user '{username}' created.", "success")
+    flash(request, f"User '{username}' created ({new_user.role_label}).", "success")
+    return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+
+
+@router.post("/admin-users/{user_id}/role")
+def change_role(
+    user_id: int,
+    request: Request,
+    role: str = Form(...),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    target = db.get(AppUser, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if role not in _VALID_ROLES:
+        flash(request, "Unknown role.", "error")
+        return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+    # Guard against locking yourself (or the bootstrap admin) out of admin access.
+    if target.is_seeded:
+        flash(request, "The seeded admin's role cannot be changed.", "error")
+        return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+    if target.id == user.id:
+        flash(request, "You cannot change your own role.", "error")
+        return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+
+    if target.role == role:
+        return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
+
+    previous = target.role
+    target.role = role
+    db.commit()
+    log.info(
+        "ui_user_role_changed",
+        extra={
+            "target_user_id": target.id,
+            "target_username": target.username,
+            "from": previous,
+            "to": role,
+            "by": user.username,
+        },
+    )
+    _settings_event(
+        request, user,
+        category="admin_user",
+        event_type="admin_user.role_changed",
+        target_type="app_user",
+        target_id=target.id,
+        target_label=target.username,
+        message=f"Changed role of '{target.username}' to {target.role_label}",
+        detail={"from": previous, "to": role},
+    )
+    flash(request, f"Role updated for {target.username} ({target.role_label}).", "success")
     return RedirectResponse(url="/ui/settings/admin-users", status_code=303)
 
 
@@ -164,7 +268,7 @@ def show_password_form(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     target = db.get(AppUser, user_id)
     if target is None:
@@ -185,7 +289,7 @@ def change_password(
     new_password: str = Form(...),
     confirm_password: str = Form(...),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     target = db.get(AppUser, user_id)
     if target is None:
@@ -234,7 +338,7 @@ def delete_admin(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     target = db.get(AppUser, user_id)
     if target is None:
@@ -273,7 +377,7 @@ def delete_admin(
 def list_api_keys(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     keys = db.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
     # Pull new_key out of session (one-shot reveal after creation)
@@ -291,7 +395,7 @@ def list_api_keys(
 @router.get("/api-keys/new")
 def show_new_api_key(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -306,7 +410,7 @@ def create_api_key(
     request: Request,
     name: str = Form(...),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     full_key, prefix = generate_api_key()
     key = ApiKey(
@@ -341,7 +445,7 @@ def revoke_api_key(
     key_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     key = db.get(ApiKey, key_id)
     if key is None:
@@ -368,7 +472,7 @@ def delete_api_key(
     key_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     key = db.get(ApiKey, key_id)
     if key is None:
@@ -399,7 +503,7 @@ def delete_api_key(
 def list_oauth_clients(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     clients = db.query(OAuthClient).order_by(OAuthClient.created_at.desc()).all()
     new_client = request.session.pop("_revealed_oauth_client", None)
@@ -416,7 +520,7 @@ def list_oauth_clients(
 @router.get("/oauth-clients/new")
 def show_new_oauth_client(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -431,7 +535,7 @@ def create_oauth_client(
     request: Request,
     name: str = Form(...),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     client_id = generate_oauth_client_id()
     client_secret = generate_oauth_client_secret()
@@ -469,7 +573,7 @@ def revoke_oauth_client(
     client_pk: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     client = db.get(OAuthClient, client_pk)
     if client is None:
@@ -496,7 +600,7 @@ def delete_oauth_client(
     client_pk: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     client = db.get(OAuthClient, client_pk)
     if client is None:
@@ -527,7 +631,7 @@ def delete_oauth_client(
 def list_auth_providers(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     providers = db.query(AuthProvider).order_by(AuthProvider.created_at.desc()).all()
     # The redirect/callback URI each provider must have registered at the IdP.
@@ -545,7 +649,7 @@ def list_auth_providers(
 @router.get("/auth-providers/new")
 def show_new_auth_provider(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -585,7 +689,7 @@ def create_auth_provider(
     scopes: str = Form(DEFAULT_SCOPES),
     is_enabled: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     slug = slug.strip().lower()
     display_name = display_name.strip()
@@ -663,7 +767,7 @@ def show_edit_auth_provider(
     provider_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     provider = db.get(AuthProvider, provider_id)
     if provider is None:
@@ -699,7 +803,7 @@ def update_auth_provider(
     scopes: str = Form(DEFAULT_SCOPES),
     is_enabled: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     provider = db.get(AuthProvider, provider_id)
     if provider is None:
@@ -780,7 +884,7 @@ def toggle_auth_provider(
     provider_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     provider = db.get(AuthProvider, provider_id)
     if provider is None:
@@ -811,7 +915,7 @@ def delete_auth_provider(
     provider_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     provider = db.get(AuthProvider, provider_id)
     if provider is None:
@@ -862,7 +966,7 @@ def _get_or_create_branding(db: Session) -> AppBranding:
 def show_branding(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     branding = _get_or_create_branding(db)
     return render(
@@ -887,7 +991,7 @@ def update_branding(
     brand_color: str = Form(""),
     icon_key: str = Form(...),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     brand_name = brand_name.strip()
     brand_color = brand_color.strip()
@@ -961,7 +1065,7 @@ _MAX_RETENTION_DAYS = 3650
 def show_system(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     config = system_config.get_config(db)
     return render(
@@ -978,7 +1082,7 @@ def update_system(
     request: Request,
     audit_retention_days: int = Form(...),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     if audit_retention_days < 0 or audit_retention_days > _MAX_RETENTION_DAYS:
         return render(
@@ -1030,7 +1134,7 @@ def update_system(
 @router.get("/reset")
 def show_reset(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -1051,7 +1155,7 @@ def do_reset(
     reset_countries: str | None = Form(None),
     reset_audit_events: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     actions: list[str] = []
 
@@ -1148,3 +1252,109 @@ def do_reset(
     )
     flash(request, "Reset complete: " + ", ".join(actions) + ".", "success")
     return RedirectResponse(url="/ui/settings/reset", status_code=303)
+
+
+# ===========================================================================
+# Backup / Restore
+# ===========================================================================
+
+
+@router.get("/backup")
+def show_backup(
+    request: Request,
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    return render(
+        request,
+        "settings/backup.html",
+        current_user=user,
+        active_subsection="backup",
+    )
+
+
+@router.post("/backup/download")
+def download_backup(
+    request: Request,
+    password: str = Form(""),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    password = password or ""
+    try:
+        data, filename = backup_service.create_backup(password or None)
+    except backup_service.BackupError as exc:
+        flash(request, f"Backup failed: {exc}", "error")
+        return RedirectResponse(url="/ui/settings/backup", status_code=303)
+
+    log.info(
+        "ui_backup_downloaded",
+        extra={"encrypted": bool(password), "size": len(data), "by": user.username},
+    )
+    _settings_event(
+        request, user,
+        category="system",
+        event_type="system.backup.created",
+        message="Downloaded a backup",
+        detail={"encrypted": bool(password), "size": len(data)},
+    )
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/backup/restore")
+async def restore_backup(
+    request: Request,
+    file: UploadFile = File(...),
+    password: str = Form(""),
+    confirm: str = Form(""),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    if confirm.strip() != "RESTORE":
+        flash(request, "Type RESTORE to confirm the restore.", "error")
+        return RedirectResponse(url="/ui/settings/backup", status_code=303)
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        flash(request, "No backup file was uploaded.", "error")
+        return RedirectResponse(url="/ui/settings/backup", status_code=303)
+
+    # Release this request's DB connection before the restore swaps the database
+    # file (and deletes its WAL) out from under it — an open handle over a
+    # deleted WAL yields a SQLite "disk I/O error". `user` is already loaded, so
+    # closing the session here is safe; record_event later opens its own on the
+    # rebuilt engine.
+    db.close()
+
+    try:
+        manifest = backup_service.restore_backup(file_bytes, password or None)
+    except backup_service.BackupError as exc:
+        flash(request, f"Restore failed: {exc}", "error")
+        return RedirectResponse(url="/ui/settings/backup", status_code=303)
+
+    log.warning("ui_backup_restored", extra={"by": user.username})
+    # Recorded through record_event's own session, which binds to the freshly
+    # rebuilt engine — the request's injected db session is now stale.
+    record_event(
+        category="system",
+        event_type="system.backup.restored",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        message="Restored data from a backup",
+        detail={
+            "surface": "ui",
+            "app_version": manifest.get("app_version"),
+            "alembic_revision": manifest.get("alembic_revision"),
+        },
+        request=request,
+    )
+    flash(
+        request,
+        "Restore complete. Restart the app to fully apply the restored session key; "
+        "you may need to sign in again.",
+        "success",
+    )
+    return RedirectResponse(url="/ui/settings/backup", status_code=303)

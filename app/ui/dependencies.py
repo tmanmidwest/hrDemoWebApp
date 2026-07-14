@@ -17,6 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db import get_db
 from app.models import AppUser
 from app.services.auth import SESSION_USER_ID_KEY
+from app.ui.flash import flash
 
 
 class _RedirectToLogin(StarletteHTTPException):
@@ -25,6 +26,17 @@ class _RedirectToLogin(StarletteHTTPException):
     def __init__(self, next_url: str) -> None:
         super().__init__(status_code=302, detail="login required")
         self.next_url = next_url
+
+
+class _Forbidden(StarletteHTTPException):
+    """Authenticated but not authorized for this page.
+
+    An exception handler turns this into a flash + redirect to /ui/employees,
+    which every role is allowed to view.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(status_code=403, detail="forbidden")
 
 
 def require_ui_user(
@@ -41,10 +53,30 @@ def require_ui_user(
     return user
 
 
+def require_admin(user: AppUser = Depends(require_ui_user)) -> AppUser:
+    """Require an admin. Raises _Forbidden for management/view-only users."""
+    if not user.is_admin:
+        raise _Forbidden()
+    return user
+
+
+def require_employee_manager(user: AppUser = Depends(require_ui_user)) -> AppUser:
+    """Require rights to manage employees (admin or management)."""
+    if not user.can_manage_employees:
+        raise _Forbidden()
+    return user
+
+
 def redirect_to_login_handler(_request: Request, exc: _RedirectToLogin) -> RedirectResponse:
     next_param = quote(exc.next_url, safe="/")
     return RedirectResponse(url=f"/ui/login?next={next_param}", status_code=303)
 
 
+def forbidden_handler(request: Request, _exc: _Forbidden) -> RedirectResponse:
+    flash(request, "You don't have permission to access that page.", "error")
+    return RedirectResponse(url="/ui/employees", status_code=303)
+
+
 # Re-export for main.py
 RedirectToLogin = _RedirectToLogin
+Forbidden = _Forbidden

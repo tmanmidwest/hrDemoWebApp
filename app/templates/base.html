@@ -55,6 +55,7 @@
           Activity
         </a>
 
+        {% if current_user and current_user.can_view_lookups %}
         <div class="sidebar__section-label">Lookups</div>
         <a href="/ui/lookups/countries" class="sidebar__link {% if active_subsection == 'countries' %}is-active{% endif %}">Countries</a>
         <a href="/ui/lookups/states-provinces" class="sidebar__link {% if active_subsection == 'states' %}is-active{% endif %}">States &amp; Provinces</a>
@@ -62,21 +63,24 @@
         <a href="/ui/lookups/departments" class="sidebar__link {% if active_subsection == 'departments' %}is-active{% endif %}">Departments</a>
         <a href="/ui/lookups/job-titles" class="sidebar__link {% if active_subsection == 'job_titles' %}is-active{% endif %}">Job Titles</a>
         <a href="/ui/lookups/locations" class="sidebar__link {% if active_subsection == 'locations' %}is-active{% endif %}">Locations</a>
+        {% endif %}
 
-        <div class="sidebar__section-label">Settings</div>
-        <a href="/ui/settings/admin-users" class="sidebar__link {% if active_subsection == 'admin_users' %}is-active{% endif %}">Admin Users</a>
-        <a href="/ui/settings/api-keys" class="sidebar__link {% if active_subsection == 'api_keys' %}is-active{% endif %}">API Keys</a>
-        <a href="/ui/settings/oauth-clients" class="sidebar__link {% if active_subsection == 'oauth_clients' %}is-active{% endif %}">OAuth Clients</a>
-        <a href="/ui/settings/auth-providers" class="sidebar__link {% if active_subsection == 'auth_providers' %}is-active{% endif %}">Identity Providers</a>
-        <a href="/ui/settings/branding" class="sidebar__link {% if active_subsection == 'branding' %}is-active{% endif %}">Branding</a>
-        <a href="/ui/settings/system" class="sidebar__link {% if active_subsection == 'system' %}is-active{% endif %}">System</a>
-        <a href="/ui/settings/reset" class="sidebar__link {% if active_subsection == 'reset' %}is-active{% endif %}">Reset Data</a>
+        {% if current_user and current_user.is_admin %}
+        <div class="sidebar__section-label">Admin</div>
+        <a href="/ui/settings" class="sidebar__link {% if active_section == 'settings' or request.url.path.startswith('/ui/settings') %}is-active{% endif %}">
+          <svg class="sidebar__link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="2"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M13 3l-1.4 1.4M4.4 11.6L3 13"/>
+          </svg>
+          Settings
+        </a>
 
         <div class="sidebar__section-label">External</div>
         <a href="/docs" target="_blank" class="sidebar__link">API Docs ↗</a>
+        {% endif %}
       </nav>
 
-      <div class="sidebar__footer">v{{ app_version }} · {{ current_user.username if current_user else "" }}</div>
+      <div class="sidebar__footer">v{{ app_version }} · {{ current_user.username if current_user else "" }}{% if current_user %} · {{ current_user.role_label }}{% endif %}</div>
     </aside>
 
     <header class="topbar">

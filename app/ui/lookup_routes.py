@@ -23,7 +23,7 @@ from app.models import (
     StateProvince,
 )
 from app.services.audit import record_event
-from app.ui.dependencies import require_ui_user
+from app.ui.dependencies import require_admin, require_employee_manager
 from app.ui.flash import flash
 from app.ui.templating import render
 
@@ -58,7 +58,7 @@ COUNTRIES_CONFIG = ListConfig(
 def list_countries(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     rows_raw = db.query(Country).order_by(Country.name).all()
     rows = [
@@ -87,7 +87,7 @@ def list_countries(
 @router.get("/countries/new")
 def show_new_country(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -107,7 +107,7 @@ def create_country(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     form = {"code": code.strip().upper(), "name": name.strip(), "is_active": bool(is_active)}
     if len(form["code"]) != 2:
@@ -160,7 +160,7 @@ def show_edit_country(
     country_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     c = db.get(Country, country_id)
     if c is None:
@@ -184,7 +184,7 @@ def update_country(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     c = db.get(Country, country_id)
     if c is None:
@@ -227,7 +227,7 @@ def delete_country(
     country_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     c = db.get(Country, country_id)
     if c is None:
@@ -279,7 +279,7 @@ STATES_CONFIG = ListConfig(
 def list_states(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     rows_raw = db.query(StateProvince).order_by(StateProvince.name).all()
     rows = [
@@ -310,7 +310,7 @@ def list_states(
 def show_new_state(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     countries = db.query(Country).filter(Country.is_active.is_(True)).order_by(Country.name).all()
     return render(
@@ -333,7 +333,7 @@ def create_state(
     code: str | None = Form(None),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     countries = db.query(Country).filter(Country.is_active.is_(True)).order_by(Country.name).all()
     form = {
@@ -393,7 +393,7 @@ def show_edit_state(
     state_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     s = db.get(StateProvince, state_id)
     if s is None:
@@ -425,7 +425,7 @@ def update_state(
     code: str | None = Form(None),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     s = db.get(StateProvince, state_id)
     if s is None:
@@ -462,7 +462,7 @@ def delete_state(
     state_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     s = db.get(StateProvince, state_id)
     if s is None:
@@ -508,7 +508,7 @@ STATUSES_CONFIG = ListConfig(
 def list_statuses(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     rows_raw = db.query(EmploymentStatus).order_by(EmploymentStatus.value).all()
     rows = [
@@ -538,7 +538,7 @@ def list_statuses(
 @router.get("/employment-statuses/new")
 def show_new_status(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -558,7 +558,7 @@ def create_status(
     value: int = Form(...),
     is_active_status: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     form = {"label": label.strip(), "value": value, "is_active_status": bool(is_active_status)}
     s = EmploymentStatus(
@@ -601,7 +601,7 @@ def show_edit_status(
     status_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     s = db.get(EmploymentStatus, status_id)
     if s is None:
@@ -629,7 +629,7 @@ def update_status(
     value: int = Form(...),
     is_active_status: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     s = db.get(EmploymentStatus, status_id)
     if s is None:
@@ -668,7 +668,7 @@ def delete_status(
     status_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     s = db.get(EmploymentStatus, status_id)
     if s is None:
@@ -717,7 +717,7 @@ DEPT_CONFIG = ListConfig(
 def list_departments(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     rows_raw = db.query(Department).order_by(Department.name).all()
     rows = [
@@ -743,7 +743,7 @@ def list_departments(
 @router.get("/departments/new")
 def show_new_dept(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -762,7 +762,7 @@ def create_dept(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     form = {"name": name.strip(), "is_active": bool(is_active)}
     d = Department(name=form["name"], is_active=form["is_active"])
@@ -803,7 +803,7 @@ def show_edit_dept(
     dept_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     d = db.get(Department, dept_id)
     if d is None:
@@ -826,7 +826,7 @@ def update_dept(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     d = db.get(Department, dept_id)
     if d is None:
@@ -860,7 +860,7 @@ def delete_dept(
     dept_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     d = db.get(Department, dept_id)
     if d is None:
@@ -911,7 +911,7 @@ TITLES_CONFIG = ListConfig(
 def list_titles(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     rows_raw = (
         db.query(JobTitle).join(JobTitle.department).order_by(Department.name, JobTitle.name).all()
@@ -943,7 +943,7 @@ def list_titles(
 def show_new_title(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     departments = db.query(Department).filter(Department.is_active.is_(True)).order_by(Department.name).all()
     return render(
@@ -965,7 +965,7 @@ def create_title(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     departments = db.query(Department).filter(Department.is_active.is_(True)).order_by(Department.name).all()
     form = {"department_id": department_id, "name": name.strip(), "is_active": bool(is_active)}
@@ -1020,7 +1020,7 @@ def show_edit_title(
     title_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     t = db.get(JobTitle, title_id)
     if t is None:
@@ -1046,7 +1046,7 @@ def update_title(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     t = db.get(JobTitle, title_id)
     if t is None:
@@ -1081,7 +1081,7 @@ def delete_title(
     title_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     t = db.get(JobTitle, title_id)
     if t is None:
@@ -1127,7 +1127,7 @@ LOCATIONS_CONFIG = ListConfig(
 def list_locations(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     rows_raw = db.query(Location).order_by(Location.name).all()
     rows = [
@@ -1153,7 +1153,7 @@ def list_locations(
 @router.get("/locations/new")
 def show_new_location(
     request: Request,
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     return render(
         request,
@@ -1172,7 +1172,7 @@ def create_location(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     form = {"name": name.strip(), "is_active": bool(is_active)}
     loc = Location(name=form["name"], is_active=form["is_active"])
@@ -1213,7 +1213,7 @@ def show_edit_location(
     location_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     loc = db.get(Location, location_id)
     if loc is None:
@@ -1236,7 +1236,7 @@ def update_location(
     name: str = Form(...),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     loc = db.get(Location, location_id)
     if loc is None:
@@ -1270,7 +1270,7 @@ def delete_location(
     location_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_admin),
 ) -> Response:
     loc = db.get(Location, location_id)
     if loc is None:

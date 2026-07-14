@@ -12,9 +12,11 @@
       {{ counts.active }} active · {{ counts.inactive }} non-active · {{ counts.archived }} archived
     </p>
   </div>
+  {% if current_user.can_manage_employees %}
   <div class="page-header__actions">
     <a href="/ui/employees/new" class="btn btn--primary">+ Add Employee</a>
   </div>
+  {% endif %}
 </div>
 
 <div class="card">
@@ -49,7 +51,7 @@
     {% if not employees %}
     <div class="table__empty">
       <div class="table__empty-text">No employees match this view.</div>
-      <div class="table__empty-hint">Try a different tab or <a href="/ui/employees/new">add an employee</a>.</div>
+      <div class="table__empty-hint">Try a different tab{% if current_user.can_manage_employees %} or <a href="/ui/employees/new">add an employee</a>{% endif %}.</div>
     </div>
     {% else %}
     {% set qs = "view=" ~ view %}
@@ -67,7 +69,7 @@
             <th data-col="hire_date">{{ M.sort_link("hire_date", "Hire Date", sort, order, "/ui/employees", qs) }}</th>
             <th data-col="country">Country</th>
             <th data-col="location">Location</th>
-            <th style="text-align:right;">Actions</th>
+            {% if current_user.can_manage_employees %}<th style="text-align:right;">Actions</th>{% endif %}
           </tr>
         </thead>
         <tbody>
@@ -92,6 +94,7 @@
             <td data-col="hire_date" class="mono text-muted">{{ e.hire_date.isoformat() }}</td>
             <td data-col="country" class="text-muted">{{ e.country.name }}</td>
             <td data-col="location" class="text-muted">{{ e.location.name if e.location else "—" }}</td>
+            {% if current_user.can_manage_employees %}
             <td class="table__actions">
               <a href="/ui/employees/{{ e.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
               {% if e.is_archived %}
@@ -105,6 +108,7 @@
                 </form>
               {% endif %}
             </td>
+            {% endif %}
           </tr>
           {% endfor %}
         </tbody>

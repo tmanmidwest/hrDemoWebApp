@@ -157,7 +157,12 @@ def create_app() -> FastAPI:
     # --- UI routers ---
     from app.ui.audit_routes import router as ui_audit_router
     from app.ui.auth_routes import router as ui_auth_router
-    from app.ui.dependencies import RedirectToLogin, redirect_to_login_handler
+    from app.ui.dependencies import (
+        Forbidden,
+        RedirectToLogin,
+        forbidden_handler,
+        redirect_to_login_handler,
+    )
     from app.ui.employee_routes import router as ui_employee_router
     from app.ui.lookup_routes import router as ui_lookup_router
     from app.ui.oidc_routes import router as ui_oidc_router
@@ -173,6 +178,8 @@ def create_app() -> FastAPI:
     # Handler that turns the UI's "you need to log in" exception into a 303
     # redirect to the login page with ?next=<original-url>.
     app.add_exception_handler(RedirectToLogin, redirect_to_login_handler)
+    # Handler for "logged in but not authorized" — flash + redirect to employees.
+    app.add_exception_handler(Forbidden, forbidden_handler)
 
     # --- Static files ---
     static_dir = Path(__file__).resolve().parent / "static"

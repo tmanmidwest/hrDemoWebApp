@@ -15,17 +15,23 @@
     <h1 class="page-header__title">{{ config.title }}</h1>
     <p class="page-header__subtitle">{{ config.subtitle }}</p>
   </div>
+  {% if current_user.is_admin %}
   <div class="page-header__actions">
     <a href="{{ config.base_path }}/new" class="btn btn--primary">+ Add {{ config.singular }}</a>
   </div>
+  {% endif %}
 </div>
 
 <div class="card card--flush">
   {% if not rows %}
     <div class="empty-state">
       <h3 class="empty-state__title">No {{ config.plural }} yet</h3>
+      {% if current_user.is_admin %}
       <p class="empty-state__body">Add your first one to get started.</p>
       <a href="{{ config.base_path }}/new" class="btn btn--primary">+ Add {{ config.singular }}</a>
+      {% else %}
+      <p class="empty-state__body">None have been configured yet.</p>
+      {% endif %}
     </div>
   {% else %}
   <div class="table-wrap">
@@ -34,7 +40,7 @@
         <tr>
           {% for h in headers %}<th>{{ h }}</th>{% endfor %}
           <th>Status</th>
-          <th style="text-align:right;">Actions</th>
+          {% if current_user.is_admin %}<th style="text-align:right;">Actions</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -50,6 +56,7 @@
               {{ M.active_badge(row.is_active) }}
             {% endif %}
           </td>
+          {% if current_user.is_admin %}
           <td class="table__actions">
             <a href="{{ config.base_path }}/{{ row.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
             {% if not row.is_system %}
@@ -59,6 +66,7 @@
             </form>
             {% endif %}
           </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>

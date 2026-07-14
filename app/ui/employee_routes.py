@@ -33,7 +33,7 @@ from app.services.employee_validation import (
     validate_supervisor,
 )
 from app.services.audit import record_event
-from app.ui.dependencies import require_ui_user
+from app.ui.dependencies import require_employee_manager, require_ui_user
 from app.ui.flash import flash
 from app.ui.templating import render
 
@@ -250,7 +250,7 @@ def _no_eligible_supervisors(db: Session) -> bool:
 def show_new_form(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     dropdowns = _form_dropdown_data(db, None, None, None)
     return render(
@@ -276,7 +276,7 @@ def show_edit_form(
     employee_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     employee = db.get(Employee, employee_id)
     if employee is None:
@@ -338,7 +338,7 @@ def state_options(
     country_id: int | None = None,
     db: Session = Depends(get_db),
     request: Request = None,  # type: ignore[assignment]
-    _user: AppUser = Depends(require_ui_user),
+    _user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     states: list[StateProvince] = []
     if country_id is not None:
@@ -359,7 +359,7 @@ def job_title_options(
     department_id: int | None = None,
     db: Session = Depends(get_db),
     request: Request = None,  # type: ignore[assignment]
-    _user: AppUser = Depends(require_ui_user),
+    _user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     titles: list[JobTitle] = []
     if department_id is not None:
@@ -484,7 +484,7 @@ def _render_form_with_error(
 async def create_employee(
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     data = await _parse_employee_form(request)
     must_have_supervisor = not _no_eligible_supervisors(db)
@@ -579,7 +579,7 @@ async def update_employee(
     employee_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     employee = db.get(Employee, employee_id)
     if employee is None:
@@ -668,7 +668,7 @@ def archive_employee(
     employee_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     employee = db.get(Employee, employee_id)
     if employee is None:
@@ -703,7 +703,7 @@ def restore_employee(
     employee_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: AppUser = Depends(require_ui_user),
+    user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     employee = db.get(Employee, employee_id)
     if employee is None:

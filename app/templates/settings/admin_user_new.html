@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% set page_title = "New Admin User" %}
+{% set page_title = "New User" %}
 {% block breadcrumb %}
-<a href="/ui/settings/admin-users">Admin Users</a>
+<a href="/ui/settings/admin-users">Users</a>
 <span class="topbar__breadcrumb-sep">/</span>
 <span>New</span>
 {% endblock %}
@@ -9,7 +9,7 @@
 {% block main %}
 <div class="page-header">
   <div class="page-header__text">
-    <h1 class="page-header__title">Add Admin User</h1>
+    <h1 class="page-header__title">Add User</h1>
     <p class="page-header__subtitle">Create a new account that can sign in to this UI.</p>
   </div>
 </div>
@@ -27,10 +27,19 @@
       <input class="input" type="password" id="password" name="password" required minlength="8" autocomplete="new-password" />
       <div class="form-hint">Minimum 8 characters.</div>
     </div>
+    <div class="form-row">
+      <label class="label" for="role">Role<span class="label__required">*</span></label>
+      <select class="select" id="role" name="role">
+        {% for value, label in role_choices %}
+        <option value="{{ value }}" {% if form.role == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-hint">Admin: full access. Management: manage employees. View Only: read-only.</div>
+    </div>
   </div>
   <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
     <a href="/ui/settings/admin-users" class="btn btn--secondary">Cancel</a>
-    <button type="submit" class="btn btn--primary">Create admin</button>
+    <button type="submit" class="btn btn--primary">Create user</button>
   </div>
 </form>
 {% endblock %}

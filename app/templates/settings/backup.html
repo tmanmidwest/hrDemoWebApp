@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set page_title = "Backup & Restore" %}
+{% block breadcrumb %}<span>Settings</span> <span class="topbar__breadcrumb-sep">/</span> <span>Backup &amp; Restore</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Backup &amp; Restore</h1>
+    <p class="page-header__subtitle">Export the whole instance to a zip, or restore it from one.</p>
+  </div>
+</div>
+
+<!-- Export -->
+<div class="card" style="max-width: 720px; margin-bottom: var(--s-6);">
+  <div class="card__header">
+    <h2 class="card__title">Export backup</h2>
+  </div>
+  <form method="post" action="/ui/settings/backup/download" class="card__body">
+    <p class="text-muted mb-6">
+      Downloads a <span class="mono">.zip</span> containing the database <strong>and</strong> this
+      instance's secret keys (session, JWT, and provider secret). Because it includes secrets,
+      store the file somewhere safe. Set a password to AES-256 encrypt the archive.
+    </p>
+
+    <div class="form-row">
+      <label class="label" for="export-password">Password <span class="text-muted">(optional)</span></label>
+      <input class="input" type="password" id="export-password" name="password" autocomplete="new-password"
+             placeholder="Leave blank for an unencrypted zip" />
+      <div class="form-hint">If set, you'll need this password to restore the backup.</div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Download backup</button>
+    </div>
+  </form>
+</div>
+
+<!-- Restore -->
+<div class="card" style="max-width: 720px; border-color: var(--danger-line);">
+  <div class="card__header" style="background: var(--danger-soft); border-bottom-color: var(--danger-line);">
+    <h2 class="card__title" style="color: var(--danger);">⚠ Restore (replaces all data)</h2>
+  </div>
+  <form method="post" action="/ui/settings/backup/restore" enctype="multipart/form-data" class="card__body">
+    <p class="text-muted mb-6">
+      Uploading a backup <strong>overwrites the current database and secret keys</strong> with the
+      file's contents. This cannot be undone. After a restore you may need to sign in again, and a
+      full app restart is recommended so the restored session key takes effect.
+    </p>
+
+    <div class="form-row">
+      <label class="label" for="restore-file">Backup file<span class="label__required">*</span></label>
+      <input class="input" type="file" id="restore-file" name="file" accept=".zip" required />
+    </div>
+
+    <div class="form-row">
+      <label class="label" for="restore-password">Password <span class="text-muted">(if encrypted)</span></label>
+      <input class="input" type="password" id="restore-password" name="password" autocomplete="off" />
+    </div>
+
+    <div data-reset-phrase="RESTORE" style="margin-top: var(--s-4);">
+      <label class="label" for="reset-confirm-input">
+        To confirm, type <span class="kbd">RESTORE</span> below:<span class="label__required">*</span>
+      </label>
+      <input class="input mono" id="reset-confirm-input" name="confirm" autocomplete="off"
+             placeholder="Type RESTORE to enable the button" />
+    </div>
+
+    <div class="form-actions">
+      <a href="/ui/settings" class="btn btn--secondary">Cancel</a>
+      <button type="submit" id="reset-submit" class="btn btn--danger" disabled>Restore from backup</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

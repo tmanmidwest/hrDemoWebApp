@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% set page_title = "Settings" %}
+{% block breadcrumb %}<span>Settings</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Settings</h1>
+    <p class="page-header__subtitle">Administer accounts, credentials, single sign-on, branding, and data.</p>
+  </div>
+</div>
+
+{% set areas = [
+  {"href": "/ui/settings/admin-users", "title": "Users", "desc": "Accounts that can sign in, and their roles."},
+  {"href": "/ui/settings/api-keys", "title": "API Keys", "desc": "Bearer keys for the REST API."},
+  {"href": "/ui/settings/oauth-clients", "title": "OAuth Clients", "desc": "Client-credentials apps for machine-to-machine access."},
+  {"href": "/ui/settings/auth-providers", "title": "Identity Providers", "desc": "OIDC single sign-on providers."},
+  {"href": "/ui/settings/branding", "title": "Branding", "desc": "App name, color, and icon."},
+  {"href": "/ui/settings/system", "title": "System", "desc": "Audit log retention and other system settings."},
+  {"href": "/ui/settings/backup", "title": "Backup & Restore", "desc": "Export the instance to a zip, or restore from one."},
+  {"href": "/ui/settings/reset", "title": "Reset Data", "desc": "Wipe and re-seed demo data."},
+] %}
+
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--s-4);">
+  {% for area in areas %}
+  <a href="{{ area.href }}" class="card" style="text-decoration: none; color: inherit; display: block; transition: box-shadow .15s, border-color .15s;">
+    <div class="card__body">
+      <h3 class="card__title" style="margin-bottom: var(--s-2);">{{ area.title }}</h3>
+      <p class="text-muted" style="margin: 0; font-size: 13px;">{{ area.desc }}</p>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

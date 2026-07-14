@@ -26,6 +26,7 @@ from app.models import (
     JobTitle,
     Location,
     StateProvince,
+    UserRole,
 )
 from app.services._seed_countries import COUNTRIES
 from app.services._seed_states import STATES_PROVINCES
@@ -313,6 +314,7 @@ def seed_admin_user(db: Session, settings: Settings) -> bool:
     user = AppUser(
         username=username,
         password_hash=hash_password(settings.initial_admin_password),
+        role=UserRole.ADMIN.value,
         is_seeded=True,
         is_active=True,
     )
