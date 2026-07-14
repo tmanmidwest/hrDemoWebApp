@@ -26,10 +26,16 @@ It is **not** designed for:
 - No password complexity enforcement (POC) — recommended to set strong passwords manually
 - No MFA support
 - No account lockout on failed attempts (POC tradeoff for ease of testing)
+- Optional OIDC single sign-on: identity providers can be configured under **Settings → Identity Providers**; SSO-provisioned accounts default to the `view_only` role
+
+**UI authorization roles** — each console account has a role that gates what it can do:
+- `admin` — full access, including Settings and lookup management
+- `management` — full employee CRUD; can view (not manage) lookups and the activity log; no Settings
+- `view_only` — read-only access to employees and the activity log
+
+The seeded `robbytheadmin` is always `admin` and cannot be demoted or disabled, guaranteeing at least one admin exists (no lockout).
 
 ### REST API
-
-Two methods supported, with identical authorization scope:
 
 **API Key**:
 - Format: `hrsot_<32-character-random-base62>`
@@ -37,6 +43,7 @@ Two methods supported, with identical authorization scope:
 - Full key value displayed exactly once at creation
 - No expiration by default (optional via `expires_at`)
 - Revocable from the UI
+- **Scoped** — each key is granted least-privilege scopes (e.g. `employees:read`, `users:write`, `admin`); a key without the required scope for an endpoint gets `403`. See [API.md](API.md#api-key-scopes). Keys predating scopes default to `admin` (full access).
 
 **OAuth 2.0 Client Credentials**:
 - Standard `client_credentials` grant flow per RFC 6749
@@ -45,6 +52,13 @@ Two methods supported, with identical authorization scope:
 - Signing key stored at `/data/jwt_signing_key` (auto-generated on first startup, 256 bits of entropy)
 - Client secrets stored as SHA-256 hashes; shown in full only at creation
 - Revoking an OAuth client invalidates the ability to mint new tokens but does **not** invalidate already-issued tokens until they expire (consistent with standard OAuth semantics)
+- OAuth-client tokens currently have **full access** (equivalent to the `admin` scope); per-client scoping is a planned follow-up
+
+### Backup / Restore
+
+- **Settings → Backup & Restore** (admin only) exports a `.zip` of the database plus the on-disk secret keys (session secret, JWT signing key, provider secret key), so it restores as a faithful clone. **The backup file is itself a credential** — anyone holding it (and its password, if set) can stand up a copy of the instance with all secrets. Store it securely.
+- Backups can be AES-256 encrypted with a password (via `pyzipper`). Password-less backups are plain zips.
+- The same export is available over the API to keys holding the `backup:create` scope (`POST /api/v1/backup`). **Restore is UI-only** — it is destructive and replaces all data.
 
 ## Credential management
 
@@ -122,7 +136,7 @@ A new key is generated on the next startup. Any active JWT tokens will start ret
 - No request signing or HMAC validation
 - No IP allowlisting (apply at network/firewall layer)
 - No SCIM 2.0 compliance
-- No SAML / OIDC SSO for the UI
+- No SAML SSO (OIDC single sign-on for the UI *is* supported — see Settings → Identity Providers)
 - No webhook delivery (Saviynt polls; no push)
 - No multi-factor authentication
 

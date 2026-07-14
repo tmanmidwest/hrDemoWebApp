@@ -14,7 +14,10 @@ All endpoints below are relative to this base URL.
 
 ## Authentication
 
-The REST API supports two authentication methods. Pick whichever the calling system supports; both grant the same level of access.
+The REST API supports two authentication methods. Pick whichever the calling system supports.
+
+- **API keys** carry **scopes** — each key is granted only the permissions it needs (see [API key scopes](#api-key-scopes) below). A key without the required scope for an endpoint gets `403 Forbidden`.
+- **OAuth 2.0 client-credentials** tokens currently have **full access** (equivalent to the `admin` scope). Scoping OAuth clients is a planned follow-up.
 
 ### Method 1: API Key
 
@@ -26,7 +29,37 @@ Host: hr.example.com
 Authorization: Bearer hrsot_a8f3d9e2c1b4e5f6g7h8i9j0k1l2m3n4
 ```
 
-API keys are created via the web UI under **Settings → API Keys**. The full key value is shown only once at creation.
+API keys are created via the web UI under **Settings → API Keys** (or `POST /api/v1/auth/api-keys/`). The full key value is shown only once at creation.
+
+### API key scopes
+
+Each key is granted a set of scopes. Endpoints require a specific scope; the wildcard `admin` scope satisfies any check.
+
+| Scope | Grants |
+|---|---|
+| `employees:read` | List/view employees |
+| `employees:write` | Create, update, archive, restore, terminate, reactivate employees |
+| `lookups:read` | List/view all lookup tables |
+| `lookups:write` | Create, update, delete lookup rows |
+| `users:read` | List/view console accounts |
+| `users:write` | Create, update, enable/disable console accounts |
+| `backup:create` | Generate a backup |
+| `admin` | Full access to every API-key-authorized endpoint |
+
+**Presets** offered in the UI when creating a key:
+- **Employee Management** → `employees:read employees:write lookups:read`
+- **Read-Only (View All)** → `employees:read lookups:read users:read`
+- **Full Admin** → `admin`
+
+Create a scoped key via the API (session-authenticated admin request):
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"name": "Saviynt Employee Sync", "scopes": ["employees:read", "employees:write", "lookups:read"]}' \
+  "http://hr.example.com/api/v1/auth/api-keys/"
+```
+
+Omitting `scopes` creates a full-access (`admin`) key, for backward compatibility. Existing keys created before scopes were introduced default to `admin`.
 
 ### Method 2: OAuth 2.0 Client Credentials
 
@@ -78,6 +111,8 @@ OAuth clients are created via the web UI under **Settings → OAuth Clients**.
 
 ### Employees
 
+Required scope: `employees:read` for GET, `employees:write` for all mutations.
+
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/v1/employees` | List employees |
@@ -100,6 +135,8 @@ OAuth clients are created via the web UI under **Settings → OAuth Clients**.
 
 ### Lookup Tables
 
+Required scope: `lookups:read` for GET, `lookups:write` for POST/PUT/PATCH/DELETE.
+
 All lookup tables support the same five operations.
 
 | Resource | Path |
@@ -118,6 +155,53 @@ Some lookup rows are flagged `is_system=true` and cannot be deleted (returns 409
 States/Provinces and Job Titles support filtering by parent:
 - `GET /api/v1/states-provinces?country_id=<id>`
 - `GET /api/v1/job-titles?department_id=<id>`
+
+### Console Users
+
+Manage the accounts that sign in to the web UI (create, read, update, enable/disable) and their roles. **There is no delete over the API** — disable instead.
+
+Required scope: `users:read` for GET, `users:write` for all mutations.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/users` | List console accounts |
+| GET | `/api/v1/users/{id}` | Get one account |
+| POST | `/api/v1/users` | Create a local (password) account |
+| PATCH | `/api/v1/users/{id}` | Update username, password, and/or role |
+| POST | `/api/v1/users/{id}/disable` | Disable (account can no longer sign in) |
+| POST | `/api/v1/users/{id}/enable` | Re-enable a disabled account |
+
+`role` is one of `admin`, `management`, `view_only` (see [SCHEMA.md](SCHEMA.md#app-users-console-accounts)). The seeded admin cannot be disabled or demoted. Create example:
+
+```bash
+curl -X POST -H "Authorization: Bearer hrsot_..." \
+  -H "Content-Type: application/json" \
+  -d '{"username": "connector-svc", "password": "a-strong-secret", "role": "management"}' \
+  "http://hr.example.com/api/v1/users"
+```
+
+### Backup
+
+Required scope: `backup:create`.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/backup` | Generate and download a full-instance backup zip |
+
+Returns `application/zip` as an attachment. Supply an optional password to AES-256 encrypt the archive. **The backup contains the database _and_ this instance's secret keys** — treat it as a credential.
+
+```bash
+# Unencrypted
+curl -X POST -H "Authorization: Bearer hrsot_..." \
+  -o backup.zip "http://hr.example.com/api/v1/backup"
+
+# Password-encrypted
+curl -X POST -H "Authorization: Bearer hrsot_..." \
+  -H "Content-Type: application/json" -d '{"password": "s3cret"}' \
+  -o backup.zip "http://hr.example.com/api/v1/backup"
+```
+
+Restore is intentionally **not** exposed over the API — it is destructive and available only in the UI under **Settings → Backup & Restore**.
 
 ### Supervisors
 

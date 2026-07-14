@@ -58,15 +58,17 @@ The following lookup tables are managed via UI and exposed via REST:
 
 **Web UI**
 - Session-cookie-based login (Starlette SessionMiddleware, signed cookies, 8-hour max age)
+- Optional OIDC single sign-on (multiple identity providers; SSO users default to `view_only`)
 - Seeded default admin: `robbytheadmin` / `N0nPr0dF0r$@viynt8`
-- Multiple admin users supported, created via UI
-- Password change via UI for any admin user
-- Reset script restores `robbytheadmin` password to the default without affecting other admin accounts
-- Cannot delete the seeded admin or your own account via UI
+- Multiple console users supported, created via UI, each with a role (`admin` / `management` / `view_only`) that gates UI access
+- Password change via UI for any user; users can be enabled/disabled
+- Reset script restores `robbytheadmin` password to the default without affecting other accounts
+- Cannot delete, disable, or demote the seeded admin; cannot delete/disable your own account via UI
 
 **REST API**
-- API key authentication (`Bearer hrsot_<32-char-rand>` in `Authorization` header)
-- OAuth 2.0 Client Credentials flow (`POST /oauth/token` returns JWT signed with persisted HS256 key)
+- API key authentication (`Bearer hrsot_<32-char-rand>` in `Authorization` header) with per-key least-privilege **scopes**
+- OAuth 2.0 Client Credentials flow (`POST /oauth/token` returns JWT signed with persisted HS256 key; currently full access)
+- Console-user management and backup export exposed over the API (users: no delete — disable instead; backup: export only)
 - API keys and OAuth clients are created, viewed, revoked, and deleted via UI
 - Secret values shown in full **only once** at creation, masked thereafter (only prefix is persisted in cleartext, full value is SHA-256 hashed)
 - Each credential tracks created date, last used timestamp, last used IP, and (for keys) a name label

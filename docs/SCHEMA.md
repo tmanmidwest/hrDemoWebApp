@@ -132,17 +132,25 @@ Display format: `{first_name} {last_name} ({employee_number})`.
 
 **Seeding consideration**: Because the first employee created cannot have a supervisor (no eligible one exists yet), the seed data and the employee creation flow treat `supervisor_id` as conditionally required — required for all employees *except* when there is no eligible supervisor in the database. An eligible supervisor is one who is not archived and whose current employment status has `is_active_status == true`. This bootstrap exception covers both a literally empty table and the case where employees exist but none are activatable yet (e.g., only the seeded "Not Active" sample employees are present). On edit, an employee that currently has no supervisor (a legitimate state for the top of the org chart) can be saved without one; once they have a supervisor, the field becomes required.
 
-## App Users (Admin Accounts)
+## App Users (Console Accounts)
 
 | Column | Type | Required | Notes |
 |---|---|---|---|
 | `id` | INTEGER | PK | |
 | `username` | TEXT | Yes | Unique, case-insensitive |
-| `password_hash` | TEXT | Yes | bcrypt hash |
+| `password_hash` | TEXT | No | bcrypt hash. Null for SSO-only accounts (they authenticate via an identity provider) |
+| `role` | TEXT | Yes | Default `admin`. One of `admin`, `management`, `view_only` — governs what the account can do in the UI |
 | `is_seeded` | BOOLEAN | Yes | `true` for `robbytheadmin`, used by reset script |
 | `is_active` | BOOLEAN | Yes | Default `true`. Inactive accounts cannot log in |
 | `created_at` | DATETIME | Yes | |
 | `last_login_at` | DATETIME | No | |
+
+**Roles** (UI authorization; the REST API is authorized separately — see API Keys):
+- `admin` — full access, including Settings and lookup management.
+- `management` — full employee CRUD; can view (not manage) lookups and the activity log; no Settings.
+- `view_only` — read-only access to employees and the activity log.
+
+The seeded `robbytheadmin` is always `admin` and cannot be demoted or disabled (prevents lockout). Accounts provisioned via SSO default to `view_only`.
 
 ## API Keys
 
@@ -152,6 +160,7 @@ Display format: `{first_name} {last_name} ({employee_number})`.
 | `name` | TEXT | Yes | Human-readable label (e.g., "Saviynt Production Connector") |
 | `key_prefix` | TEXT | Yes | First 8 chars of the key, shown in UI for identification |
 | `key_hash` | TEXT | Yes | SHA-256 hash of the full key |
+| `scopes` | TEXT | Yes | Space-separated permission scopes (default `admin`). Governs which API endpoints the key may call — see [API.md](API.md#api-key-scopes) |
 | `created_by_user_id` | INTEGER | Yes | FK → `app_users.id` |
 | `created_at` | DATETIME | Yes | |
 | `last_used_at` | DATETIME | No | |
@@ -159,7 +168,7 @@ Display format: `{first_name} {last_name} ({employee_number})`.
 | `revoked_at` | DATETIME | No | Soft-revoke; revoked keys cannot authenticate |
 | `expires_at` | DATETIME | No | Optional expiration |
 
-Full key format: `hrsot_<32-char-random>`. Shown to user only at creation.
+Full key format: `hrsot_<32-char-random>`. Shown to user only at creation. Keys created before scopes existed default to `admin` (full access) on migration.
 
 ## OAuth Clients
 

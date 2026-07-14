@@ -8,9 +8,12 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 
 - Stores employee records with realistic HR fields (employee number, name, contact info, department, job title, supervisor, employment status, hire/termination dates)
 - Provides managed lookup tables for countries, states/provinces, employment statuses, departments, and job titles
-- Exposes a full REST API for employee CRUD operations, suitable for IGA/IAM connector consumption
-- Includes a refined-minimal web UI for managing employees, lookups, admin users, and API credentials
-- Supports both **API key** and **OAuth 2.0 Client Credentials** authentication for the REST API
+- Exposes a full REST API for employee, lookup, and console-user management, plus backup export — suitable for IGA/IAM connector consumption
+- Includes a refined-minimal web UI for managing employees, lookups, console users, and API credentials, with a consolidated **Settings** area for admins
+- **Role-based UI access**: `admin`, `management` (employee CRUD), and `view_only` roles
+- Supports both **API key** and **OAuth 2.0 Client Credentials** authentication for the REST API, with **least-privilege scopes on API keys** (e.g. an employee-only key vs. a full-admin key)
+- **Backup & Restore**: export the whole instance to a (optionally password-encrypted) zip and restore from it
+- Optional **OIDC single sign-on** for the UI (multiple identity providers)
 - Reset-data feature for returning to a clean state between demos
 - Ships as a single Docker container (built from source) with SQLite persistence
 - Deployable locally, via Portainer, to AWS ECS/Fargate (scripted, one command), Azure Container Apps, or any Kubernetes cluster
@@ -67,7 +70,7 @@ See [`docs/fargate/README.md`](docs/fargate/README.md) for the complete guide in
 | `/ui/login` | Login page |
 | `/ui/employees` | Employee list (after login) |
 | `/ui/lookups/...` | Manage countries, states, departments, statuses, job titles |
-| `/ui/settings/...` | Manage admin users, API keys, OAuth clients, reset data |
+| `/ui/settings` | Admin-only settings hub: users, API keys, OAuth clients, identity providers, branding, system, backup & restore, reset data |
 | `/docs` | Swagger UI for the REST API |
 | `/redoc` | Alternative REST API documentation |
 | `/health` | JSON health probe (status + DB check) |
@@ -79,7 +82,7 @@ See [`docs/fargate/README.md`](docs/fargate/README.md) for the complete guide in
 | Username | `robbytheadmin` |
 | Password | `N0nPr0dF0r$@viynt8` |
 
-> These credentials are intended for non-production POC use only. Change the password immediately via **Settings → Admin Users → Change Password** in the UI, or rotate it using the included reset script. See [docs/SECURITY.md](docs/SECURITY.md).
+> These credentials are intended for non-production POC use only. Change the password immediately via **Settings → Users → Change Password** in the UI, or rotate it using the included reset script. See [docs/SECURITY.md](docs/SECURITY.md).
 
 ## The web UI
 
@@ -87,8 +90,11 @@ The UI uses a refined-minimal admin aesthetic — quiet, professional, easy on t
 
 - **Employee list** with tabs (Active / All / Archived), sortable columns, and per-machine column visibility (saved to your browser)
 - **Add/Edit Employee** form with HTMX-powered dependent dropdowns: pick a country and the state/province list updates; pick a department and the job title list updates
-- **Lookup management** for all five lookup tables. Deletes are blocked (with a helpful 409 message) if any other row still references the target — set `is_active=false` instead
-- **API keys and OAuth clients** management. Secrets are displayed **once** at creation, then only the prefix is shown
+- **Lookup management** for all six lookup tables. Deletes are blocked (with a helpful 409 message) if any other row still references the target — set `is_active=false` instead
+- **Role-based access**: the sidebar and available actions adapt to the signed-in user's role (`admin` / `management` / `view_only`)
+- **Users** management with role assignment and enable/disable
+- **API keys** with least-privilege **scope selection** (presets: Employee Management, Read-Only, Full Admin) — plus OAuth clients. Secrets are displayed **once** at creation, then only the prefix is shown
+- **Backup & Restore** — export the instance to a (optionally password-encrypted) zip and restore from one
 - **Reset Data** page with checkboxes per table and a typed-phrase confirmation guard (you must type `RESET` to enable the destructive button)
 
 For the full UI overview, see [docs/UI.md](docs/UI.md).
@@ -115,7 +121,7 @@ For the full UI overview, see [docs/UI.md](docs/UI.md).
 - **ORM**: SQLAlchemy 2.x with Alembic migrations
 - **Frontend**: Server-rendered Jinja2 templates + HTMX for dependent dropdowns
 - **Styling**: Hand-crafted CSS design system (no framework) with Geist Sans + Geist Mono
-- **Auth**: Session cookies (UI), API keys + OAuth 2.0 Client Credentials (REST API)
+- **Auth**: Session cookies + role-based access + optional OIDC SSO (UI); scoped API keys + OAuth 2.0 Client Credentials (REST API)
 - **Container**: Python slim base image, ~180MB
 
 ## License

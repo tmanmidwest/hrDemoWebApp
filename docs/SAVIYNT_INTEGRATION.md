@@ -35,8 +35,9 @@ Both surfaces use the same database and the same validation rules, so changes ar
 2. Navigate to **Settings → API Keys**
 3. Click **Create New API Key**
 4. Name it (e.g., `Saviynt Production Connector`)
-5. Copy the displayed key value — **this is the only time it will be shown in full**
-6. Provide the key to whoever is configuring Saviynt
+5. Choose the key's **permissions**. For a read-only employee sync, the **Read-Only (View All)** preset is enough; if the connector also writes back status/termination, use **Employee Management**. Avoid handing a connector a Full Admin key. (See [API.md → API key scopes](API.md#api-key-scopes).)
+6. Copy the displayed key value — **this is the only time it will be shown in full**
+7. Provide the key to whoever is configuring Saviynt
 
 **Option B — OAuth 2.0 Client**:
 

@@ -1,6 +1,8 @@
 # Web UI
 
-The Demo HR Source of Truth App ships with a complete web UI for managing employees, lookup tables, admin users, API credentials, and the reset feature. This doc walks through the UI surface page by page and covers the design system and key interaction patterns.
+The Demo HR Source of Truth App ships with a complete web UI for managing employees, lookup tables, console users, API credentials, backups, and the reset feature. This doc walks through the UI surface page by page and covers the design system and key interaction patterns.
+
+**Role-based access**: every console account has a role (`admin`, `management`, or `view_only`) that controls what appears in the sidebar and which actions are available. See [Role-based access](#role-based-access) below. Admin-only areas are grouped under a single **Settings** section.
 
 ## Accessing the UI
 
@@ -18,7 +20,21 @@ The UI runs on the same host and port as the REST API. There is no separate fron
 | Username | `robbytheadmin` |
 | Password | `N0nPr0dF0r$@viynt8` |
 
-Change the password on first login via **Settings → Admin Users → Change Password**.
+Change the password on first login via **Settings → Users → Change Password**.
+
+## Role-based access
+
+Each account has one of three roles. The UI adapts to it:
+
+| Capability | `admin` | `management` | `view_only` |
+|---|---|---|---|
+| View employees & activity log | ✓ | ✓ | ✓ |
+| Add / edit / archive employees | ✓ | ✓ | — |
+| View lookups | ✓ | ✓ | — |
+| Manage lookups (add/edit/delete) | ✓ | — | — |
+| Settings (users, API keys, OAuth, IdP, branding, system, backup, reset) | ✓ | — | — |
+
+Non-admins never see the Settings section; a `view_only` user sees employees and activity but no create/edit controls. Direct navigation to a forbidden URL redirects to the employee list with a "You don't have permission" flash. The seeded `robbytheadmin` is always `admin` and cannot be demoted or disabled. SSO-provisioned accounts default to `view_only`.
 
 ## Page-by-page walkthrough
 
@@ -37,7 +53,7 @@ The primary working surface. Shows a table of employees with the following featu
 - **Default sort**: Active-status employees always appear before non-active per the spec, regardless of the secondary sort column.
 - **Column visibility picker**: Click the "Columns ▾" button to show/hide Department, Job Title, Work Email, Supervisor, Hire Date, and Country. Selections are saved to your browser's localStorage under the key `hrsot.cols.employees` — they persist per machine, not per user.
 - **Status badges**: Green dot for "Active" or any other `is_active_status=true` status; amber for non-active statuses (Not Active, Leave of Absence, Terminated); neutral gray "Archived" badge for archived rows.
-- **Row actions**: Edit, Archive (or Restore if currently archived).
+- **Row actions**: Edit, Archive (or Restore if currently archived). Hidden for `view_only` users, who see the list as read-only.
 
 ### Add/Edit Employee (`/ui/employees/new` and `/ui/employees/{id}/edit`)
 
@@ -82,25 +98,33 @@ The recommended pattern is to set `is_active = false` rather than delete — tha
 
 **System-flagged employment statuses** (`Active`, `Not Active`) cannot be deleted at all, and their numeric `value` cannot be changed (Saviynt and other IGA systems may depend on these values being stable). The delete button doesn't appear for system rows, and the value field is read-only in the edit form.
 
-### Settings → Admin Users (`/ui/settings/admin-users`)
+### Settings (`/ui/settings`)
 
-Manage the accounts that can log in to the UI.
+Settings is **admin-only** and collapsed behind a single sidebar link. The landing page (`/ui/settings`) is a hub of cards linking to each area: Users, API Keys, OAuth Clients, Identity Providers, Branding, System, Backup & Restore, and Reset Data.
 
-- **List view**: shows username, status (Active/Disabled), created date, last login. The seeded `robbytheadmin` is marked with a "Seeded" badge.
-- **Add Admin**: simple username + password form. Password must be at least 8 characters.
+### Settings → Users (`/ui/settings/admin-users`)
+
+Manage the accounts that can log in to the UI and their roles.
+
+- **List view**: shows username, **role**, status (Active/Disabled), created date, last login. The seeded `robbytheadmin` is marked with a "Seeded" badge.
+- **Add User**: username + password + **role** (Admin / Management / View Only). Password must be at least 8 characters.
+- **Role**: change inline from the list (a dropdown that saves on change). Blocked for the seeded admin and for your own account.
+- **Enable / Disable**: toggle whether an account can sign in. Blocked for the seeded admin and for your own account (no self-lockout).
 - **Change Password**: per-user, requires new password + confirm password. No "old password" check because admins can reset each other.
-- **Delete**: blocked for the seeded `robbytheadmin` account (use Disabled instead) and for your own account.
+- **Delete**: blocked for the seeded `robbytheadmin` account (disable instead) and for your own account.
+
+Console users are also manageable over the REST API — see [API.md → Console Users](API.md#console-users) (no delete via API; disable instead).
 
 ### Settings → API Keys (`/ui/settings/api-keys`)
 
 Manage long-lived bearer tokens for REST API consumers (Saviynt, scripts, integrations).
 
-- **Create**: enter a name (e.g. "Saviynt Production Connector") and the system generates a new key formatted `hrsot_<32-random-chars>`. The **full key is displayed once** in a yellow banner at the top of the list page right after creation. The page warns: "This is the only time the full key is shown. After leaving this page you'll only see the prefix."
-- **List**: shows name, prefix (`hrsot_AbCdEfGh…`), status (Active/Revoked), created date, last used.
+- **Create**: enter a name (e.g. "Saviynt Production Connector") and choose the key's **permissions** — either a one-click preset (Employee Management, Read-Only, or Full Admin) or individual scope checkboxes. The system generates a new key formatted `hrsot_<32-random-chars>`. The **full key is displayed once** in a yellow banner at the top of the list page right after creation. The page warns: "This is the only time the full key is shown. After leaving this page you'll only see the prefix."
+- **List**: shows name, prefix (`hrsot_AbCdEfGh…`), **permissions** (scope badges), status (Active/Revoked), created date, last used.
 - **Revoke**: marks the key with a `revoked_at` timestamp. Existing usage stops working immediately. The key remains in the list for audit purposes.
 - **Delete**: permanently removes the key record.
 
-Storage: only the prefix and SHA-256 hash of the full key are persisted. The plaintext value is never written to the database.
+Scopes are enforced on every API call — a key without the required scope gets `403`. To change a key's permissions, revoke it and create a new one. See [API.md → API key scopes](API.md#api-key-scopes) for the full scope list. Storage: only the prefix and SHA-256 hash of the full key are persisted. The plaintext value is never written to the database.
 
 ### Settings → OAuth Clients (`/ui/settings/oauth-clients`)
 
@@ -111,6 +135,15 @@ Same pattern as API keys but for OAuth 2.0 Client Credentials flow.
 - **Delete**: permanently removes the client record.
 
 To use these credentials, the consuming system calls `POST /oauth/token` with `grant_type=client_credentials`, the `client_id`, and the `client_secret`, and receives a JWT to use as a Bearer token on subsequent API calls.
+
+### Settings → Backup & Restore (`/ui/settings/backup`)
+
+Export the whole instance or restore it from a backup.
+
+- **Export**: optionally set a password, then **Download backup**. Produces a `.zip` containing the database plus this instance's secret keys (session, JWT, provider). With a password the archive is AES-256 encrypted; without one it's a plain zip. Because it bundles secrets, the page warns to store the file securely.
+- **Restore**: upload a backup zip (with its password, if encrypted) and type `RESTORE` to enable the button. Restoring **replaces the current database and secret keys** with the file's contents — the swap happens live (the DB engine is rebuilt and older backups are migrated up). You may need to sign in again afterward, and a full app restart is recommended so the restored session key takes effect.
+
+Export is also available over the API to keys with the `backup:create` scope (`POST /api/v1/backup`); **restore is UI-only**.
 
 ### Settings → Reset Data (`/ui/settings/reset`)
 
@@ -158,7 +191,7 @@ All colors are defined as CSS variables in `:root`, so theming changes are a sin
 
 ### Layout
 
-- **Sidebar** (232px wide, fixed): brand at the top, grouped nav links (Employees, Lookups, Settings, External), version + current user at the bottom
+- **Sidebar** (232px wide, fixed): brand at the top, then role-aware nav — Employees and Activity for everyone, a Lookups group for admins and management, and (admins only) a single **Settings** link plus an External group. Version, current user, and their role show at the bottom
 - **Topbar** (56px tall): breadcrumb on the left, current user + sign-out on the right
 - **Main content area**: page header (title + subtitle + actions), then a card-based content layout
 
@@ -213,17 +246,23 @@ app/
       department_form.html
       job_title_form.html
     settings/
-      admin_users.html
+      index.html                      # Settings hub (card links)
+      admin_users.html                # Users list (roles, enable/disable)
       admin_user_new.html
       admin_user_password.html
       api_keys.html
-      api_key_new.html
+      api_key_new.html                # Scope checkboxes + presets
       oauth_clients.html
       oauth_client_new.html
+      auth_providers.html             # OIDC identity providers
+      auth_provider_form.html
+      branding.html
+      system.html
+      backup.html                     # Backup & Restore
       reset.html
   static/
     app.css                           # The design system
-    app.js                            # Flash auto-dismiss, column picker, modal, reset-confirm
+    app.js                            # Flash auto-dismiss, column picker, modal, reset/restore-confirm
 ```
 
-All UI tests live in `tests/test_ui.py` — 24 tests covering rendering, auth redirects, form submission, the column picker, the reset feature, and the API key/OAuth client one-time-reveal pattern.
+Role authorization lives in `app/ui/dependencies.py` (`require_admin`, `require_employee_manager`, and a forbidden→redirect handler). UI tests live in `tests/test_ui.py`; role gating and enable/disable in `tests/test_roles.py`; backup/restore in `tests/test_backup.py`; API-key scopes in `tests/test_api_key_scopes.py`.
