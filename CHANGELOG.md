@@ -6,6 +6,27 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [0.3.0] — 2026-07-14
+
+### Added
+
+**Dark mode**
+- A light/dark theme toggle (sun/moon) in the topbar and on the login page. The whole UI is
+  CSS-variable–driven, so dark mode is a full re-theme of surfaces, text, accents, semantic
+  colors, and shadows.
+- Theme is a **per-user profile preference** (`app_users.theme`): it saves to the signed-in
+  account and follows the user across browsers and devices. When unset, the UI follows the
+  operating system's `prefers-color-scheme`.
+- The saved preference is rendered server-side onto `<html>` (plus a small pre-paint head
+  script) so there is no flash of the wrong theme on load or navigation.
+- New endpoint `POST /ui/preferences/theme` (any signed-in user) persists the choice;
+  `system` clears it back to OS-follow.
+
+### Migrations
+
+- `0009_add_user_theme` — adds nullable `app_users.theme` (existing accounts follow the OS
+  until they pick a theme).
+
 ## [0.2.0] — 2026-07-14
 
 Four features landed in this batch: UI roles, backup/restore, a console-user &

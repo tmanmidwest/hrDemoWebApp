@@ -306,6 +306,54 @@ def test_reset_nothing_selected(ui_session: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_theme_toggle_present(ui_session: TestClient) -> None:
+    # App shell exposes the toggle...
+    assert 'id="theme-toggle"' in ui_session.get("/ui/employees").text
+
+
+def test_login_page_has_theme_toggle_and_early_script(client: TestClient) -> None:
+    body = client.get("/ui/login").text
+    assert 'id="theme-toggle"' in body
+    # ...and the no-flash script that sets the theme before paint.
+    assert "hrsot.theme" in body
+
+
+def test_dark_theme_tokens_in_css(client: TestClient) -> None:
+    css = client.get("/static/app.css").text
+    assert '[data-theme="dark"]' in css
+
+
+def test_theme_preference_persists_to_profile(ui_session: TestClient) -> None:
+    # Save a dark preference...
+    resp = ui_session.post("/ui/preferences/theme", data={"theme": "dark"})
+    assert resp.status_code == 200
+    assert resp.json()["theme"] == "dark"
+    # ...and the app shell renders it server-side on <html> (no flash).
+    page = ui_session.get("/ui/employees").text
+    assert 'data-theme="dark"' in page
+
+    # "system" clears the stored value (follow OS again).
+    resp = ui_session.post("/ui/preferences/theme", data={"theme": "system"})
+    assert resp.status_code == 200
+    assert resp.json()["theme"] is None
+    page = ui_session.get("/ui/employees").text
+    assert 'data-theme="dark"' not in page  # no server value → head script decides
+
+
+def test_theme_invalid_value_rejected(ui_session: TestClient) -> None:
+    resp = ui_session.post("/ui/preferences/theme", data={"theme": "neon"})
+    assert resp.status_code == 400
+
+
+def test_theme_endpoint_requires_login(client: TestClient) -> None:
+    # Unauthenticated → redirected to login (not saved).
+    resp = client.post(
+        "/ui/preferences/theme", data={"theme": "dark"}, follow_redirects=False
+    )
+    assert resp.status_code in (302, 303)
+    assert "/ui/login" in resp.headers["location"]
+
+
 def test_static_css_served(client: TestClient) -> None:
     resp = client.get("/static/app.css")
     assert resp.status_code == 200

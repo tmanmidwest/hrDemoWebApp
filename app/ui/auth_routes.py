@@ -10,7 +10,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -22,8 +22,12 @@ from app.services.auth import (
 )
 from app.services.audit import record_event
 from app.services.passwords import verify_password
+from app.ui.dependencies import require_ui_user
 from app.ui.flash import flash
 from app.ui.templating import render
+
+# Accepted theme values; "system" clears the stored preference (follow OS).
+_VALID_THEMES = {"light", "dark", "system"}
 
 log = logging.getLogger(__name__)
 
@@ -130,6 +134,25 @@ def do_logout(request: Request) -> Response:
             request=request,
         )
     return RedirectResponse(url="/ui/login", status_code=303)
+
+
+@router.post("/preferences/theme")
+def set_theme(
+    theme: str = Form(...),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_ui_user),
+) -> Response:
+    """Persist the signed-in user's UI theme preference.
+
+    Available to any logged-in user (all roles). `system` clears the stored
+    value so the UI follows the OS setting.
+    """
+    theme = theme.strip().lower()
+    if theme not in _VALID_THEMES:
+        return JSONResponse({"error": "Invalid theme."}, status_code=400)
+    user.theme = None if theme == "system" else theme
+    db.commit()
+    return JSONResponse({"theme": user.theme})
 
 
 @router.get("/")

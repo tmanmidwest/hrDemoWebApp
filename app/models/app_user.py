@@ -53,6 +53,8 @@ class AppUser(Base, TimestampMixin):
     )
     is_seeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # UI theme preference: NULL follows the OS setting, else "light" / "dark".
+    theme: Mapped[str | None] = mapped_column(String(10), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

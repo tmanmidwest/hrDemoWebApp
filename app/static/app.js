@@ -105,3 +105,30 @@ if (resetPhrase) {
     });
   }
 }
+
+// Dark-mode toggle. The theme is applied pre-paint by a small head script (or
+// rendered server-side from the user's saved preference). Clicking flips
+// <html data-theme>, caches it locally (used on the login page and to avoid a
+// flash), and — when signed in — persists it to the user's profile so the
+// choice follows their account across devices.
+const themeToggle = document.getElementById('theme-toggle');
+if (themeToggle) {
+  themeToggle.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem('hrsot.theme', next);
+    } catch (e) {}
+    // Best-effort persist to the profile; ignored on the login page (401).
+    try {
+      const body = new URLSearchParams();
+      body.set('theme', next);
+      fetch('/ui/preferences/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      }).catch(function () {});
+    } catch (e) {}
+  });
+}

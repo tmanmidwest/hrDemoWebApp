@@ -142,6 +142,7 @@ Display format: `{first_name} {last_name} ({employee_number})`.
 | `role` | TEXT | Yes | Default `admin`. One of `admin`, `management`, `view_only` — governs what the account can do in the UI |
 | `is_seeded` | BOOLEAN | Yes | `true` for `robbytheadmin`, used by reset script |
 | `is_active` | BOOLEAN | Yes | Default `true`. Inactive accounts cannot log in |
+| `theme` | TEXT | No | UI theme preference: `NULL` follows the OS setting, else `light` / `dark` |
 | `created_at` | DATETIME | Yes | |
 | `last_login_at` | DATETIME | No | |
 

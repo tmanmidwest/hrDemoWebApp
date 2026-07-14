@@ -203,6 +203,19 @@ All colors are defined as CSS variables in `:root`, so theming changes are a sin
 - **Tables**: sticky headers, hover row highlight, archived rows are grayed out, columns marked with `data-col="..."` participate in the column-visibility picker.
 - **Confirms**: irreversible actions (archive, delete, revoke) use a JavaScript `confirm()` dialog. Reset uses the typed-phrase pattern described above for extra safety.
 
+### Dark mode
+
+A sun/moon toggle in the topbar (and on the login page) switches between light and dark. The
+whole UI is CSS-variable–driven, so dark mode is a token override under `:root[data-theme="dark"]`
+in `app.css` — no per-page work.
+
+- The chosen theme is a **per-user profile preference** (`app_users.theme`), saved via
+  `POST /ui/preferences/theme` and rendered server-side onto `<html data-theme="…">`, so it
+  follows the account across browsers/devices with no flash on load.
+- When a user hasn't picked a theme, the UI follows the OS `prefers-color-scheme`. A small
+  pre-paint head script and a `localStorage` cache cover the login page (pre-auth) and prevent
+  a flash of the wrong theme.
+
 ### Iconography
 
 The sidebar uses tiny inline SVG icons. The page favicon is also an inline SVG (a small filing cabinet). No external icon font is loaded — every glyph is either an SVG, a Unicode arrow, or text.
