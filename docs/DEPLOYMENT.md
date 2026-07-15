@@ -33,19 +33,29 @@ The [MCP server](MCP.md) is a separate, **stateless** container that proxies MCP
 tool calls to the app's REST API. It needs no volume and stores no data. It is
 configured with `HRMCP_`-prefixed variables:
 
+**To change the inbound (published) port, set `HRMCP_HOST_PORT`** — that's the
+host-side port you connect to. With Compose the container always listens on
+`8100` internally, so `HRMCP_HOST_PORT=9026` publishes it as `9026:8100` (you
+reach the server at `http://<host>:9026/mcp`). These two Compose-substitution
+variables (used only by `docker-compose.yml`) support side-by-side stacks:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HRMCP_HOST_PORT` | `8100` | **Inbound/published port** — the one clients connect to |
+| `HRMCP_CONTAINER_NAME` | `demo-hr-mcp` | Container name |
+
+The server itself reads these `HRMCP_`-prefixed variables:
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `HRMCP_HR_API_BASE_URL` | `http://hr-sot:8000` | Upstream app base URL the server proxies to |
-| `HRMCP_BIND_HOST` | `0.0.0.0` | Host to bind |
-| `HRMCP_BIND_PORT` | `8100` | Port to bind (inside the container) |
 | `HRMCP_PATH` | `/mcp` | URL path of the streamable-HTTP endpoint |
 | `HRMCP_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request timeout to the app |
 | `HRMCP_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `HRMCP_BIND_HOST` | `0.0.0.0` | Host to bind inside the container |
+| `HRMCP_BIND_PORT` | `8100` | Port the server process listens on. In Compose the published mapping is fixed to `:8100`, so leave this alone there and use `HRMCP_HOST_PORT`; it's only useful when running the server **without** Docker (`python -m mcp_server`). |
 
-Plus two Compose-substitution variables (used only by `docker-compose.yml`, see
-[MCP server](#mcp-server-optional) below) for running side-by-side stacks:
-`HRMCP_HOST_PORT` (host-side published port, default `8100`) and
-`HRMCP_CONTAINER_NAME` (default `demo-hr-mcp`). None are required.
+None are required.
 
 ## Local Docker
 
@@ -99,10 +109,9 @@ services:
       hr-sot:
         condition: service_healthy   # wait for the app before serving tools
     ports:
-      - "${HRMCP_HOST_PORT:-8100}:${HRMCP_BIND_PORT:-8100}"
+      - "${HRMCP_HOST_PORT:-8100}:8100"   # container always listens on 8100
     environment:
       HRMCP_HR_API_BASE_URL: http://hr-sot:8000   # reaches the app by service name
-      HRMCP_BIND_PORT: ${HRMCP_BIND_PORT:-8100}
       HRMCP_PATH: ${HRMCP_PATH:-/mcp}
       HRMCP_LOG_LEVEL: INFO
     restart: unless-stopped
@@ -255,7 +264,7 @@ HRMCP_HOST_PORT=9100 HRMCP_CONTAINER_NAME=dev-hr-mcp \
 docker compose -p hrsot-dev up -d --build
 ```
 
-Each project gets its own network, so within each one `hr-mcp` still resolves the app as `http://hr-sot:8000` regardless of the overridden container names. The `HRMCP_*` container-side settings (`HRMCP_BIND_PORT`, `HRMCP_PATH`, `HRMCP_HR_API_BASE_URL`, …) from the [environment variables](#mcp-server-hr-mcp-optional) table are also honored if you need to change the internal port or path.
+`HRMCP_HOST_PORT` is the inbound port each stack publishes — give each stack a different value (here `8100` vs `9100`) and they won't collide. Each project also gets its own network, so within each one `hr-mcp` still resolves the app as `http://hr-sot:8000` regardless of the overridden container names. Other server settings (`HRMCP_PATH`, `HRMCP_HR_API_BASE_URL`, …) from the [environment variables](#mcp-server-hr-mcp-optional) table are honored too if you need to change the endpoint path or upstream URL.
 
 ### On the cloud targets
 

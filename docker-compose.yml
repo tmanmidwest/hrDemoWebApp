@@ -36,15 +36,15 @@ services:
       hr-sot:
         # Wait until the app is healthy so early tool calls don't hit a cold API.
         condition: service_healthy
-    # Host port and bind port are both overridable. Set distinct HRMCP_HOST_PORT
-    # values to run dev and prod MCP servers on one host.
+    # The container always listens on 8100 internally; HRMCP_HOST_PORT sets the
+    # inbound (published) port. Set distinct HRMCP_HOST_PORT values to run dev
+    # and prod MCP servers on one host, e.g. HRMCP_HOST_PORT=9026 -> 9026:8100.
     ports:
-      - "${HRMCP_HOST_PORT:-8100}:${HRMCP_BIND_PORT:-8100}"
+      - "${HRMCP_HOST_PORT:-8100}:8100"
     environment:
       # Reaches the app by its compose service name on the project network, so
       # this stays correct even if HRSOT_CONTAINER_NAME is overridden.
       HRMCP_HR_API_BASE_URL: http://hr-sot:8000
-      HRMCP_BIND_PORT: ${HRMCP_BIND_PORT:-8100}
       HRMCP_PATH: ${HRMCP_PATH:-/mcp}
       HRMCP_LOG_LEVEL: INFO
     restart: unless-stopped
