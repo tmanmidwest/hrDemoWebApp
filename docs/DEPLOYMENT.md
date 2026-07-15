@@ -14,6 +14,8 @@ If `/data` is ephemeral, every container restart wipes employees, credentials, a
 
 ## Environment variables
 
+### App (`hr-sot`)
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `HRSOT_DATA_DIR` | `/data` | Persistent storage location |
@@ -24,6 +26,26 @@ If `/data` is ephemeral, every container restart wipes employees, credentials, a
 | `HRSOT_BIND_PORT` | `8000` | Port to bind |
 
 None are required for a working deployment.
+
+### MCP server (`hr-mcp`, optional)
+
+The [MCP server](MCP.md) is a separate, **stateless** container that proxies MCP
+tool calls to the app's REST API. It needs no volume and stores no data. It is
+configured with `HRMCP_`-prefixed variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HRMCP_HR_API_BASE_URL` | `http://hr-sot:8000` | Upstream app base URL the server proxies to |
+| `HRMCP_BIND_HOST` | `0.0.0.0` | Host to bind |
+| `HRMCP_BIND_PORT` | `8100` | Port to bind (inside the container) |
+| `HRMCP_PATH` | `/mcp` | URL path of the streamable-HTTP endpoint |
+| `HRMCP_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request timeout to the app |
+| `HRMCP_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+
+Plus two Compose-substitution variables (used only by `docker-compose.yml`, see
+[MCP server](#mcp-server-optional) below) for running side-by-side stacks:
+`HRMCP_HOST_PORT` (host-side published port, default `8100`) and
+`HRMCP_CONTAINER_NAME` (default `demo-hr-mcp`). None are required.
 
 ## Local Docker
 
@@ -45,14 +67,14 @@ Access at `http://localhost:8000`.
 
 ## Docker Compose
 
-The included [`docker-compose.yml`](../docker-compose.yml) builds the image from source (`build: .`) — no image pull required:
+The included [`docker-compose.yml`](../docker-compose.yml) builds from source (`build: .`) — no image pull required. It defines **two services**: the app (`hr-sot`) and the optional MCP server (`hr-mcp`):
 
 ```yaml
 services:
   hr-sot:
     build: .
     image: demo-hr-sot:local
-    container_name: demo-hr-sot
+    container_name: ${HRSOT_CONTAINER_NAME:-demo-hr-sot}
     ports:
       - "${HRSOT_HOST_PORT:-8000}:8000"
     volumes:
@@ -67,21 +89,43 @@ services:
       retries: 3
       start_period: 10s
 
+  hr-mcp:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+    image: demo-hr-mcp:local
+    container_name: ${HRMCP_CONTAINER_NAME:-demo-hr-mcp}
+    depends_on:
+      hr-sot:
+        condition: service_healthy   # wait for the app before serving tools
+    ports:
+      - "${HRMCP_HOST_PORT:-8100}:${HRMCP_BIND_PORT:-8100}"
+    environment:
+      HRMCP_HR_API_BASE_URL: http://hr-sot:8000   # reaches the app by service name
+      HRMCP_BIND_PORT: ${HRMCP_BIND_PORT:-8100}
+      HRMCP_PATH: ${HRMCP_PATH:-/mcp}
+      HRMCP_LOG_LEVEL: INFO
+    restart: unless-stopped
+
 volumes:
   hrsot-data:
 ```
 
-It uses a **named volume** (`hrsot-data`), not a host bind mount. The container runs as the non-root `hrsot` user (uid/gid 1000); a fresh named volume inherits the image's `/data` ownership, so the app can write its database and session secret. A bind mount (`./data:/data`) would be created root-owned on the host and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`.
+`hr-sot` uses a **named volume** (`hrsot-data`), not a host bind mount. The container runs as the non-root `hrsot` user (uid/gid 1000); a fresh named volume inherits the image's `/data` ownership, so the app can write its database and session secret. A bind mount (`./data:/data`) would be created root-owned on the host and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`.
+
+`hr-mcp` is **stateless** — no volume, no data. It waits for `hr-sot` to be healthy, then reaches it over the project network by its service name (`http://hr-sot:8000`), so it keeps working even if you override the container names. It's harmless to leave running; if you don't need MCP, start only the app with `docker compose up -d hr-sot`.
 
 Run with:
 
 ```bash
 git clone https://github.com/tmanmidwest/hrDemoWebApp.git
 cd hrDemoWebApp
-docker compose up -d --build
+docker compose up -d --build            # app + MCP server
+# or just the app:
+docker compose up -d --build hr-sot
 ```
 
-The `--build` flag rebuilds the image; on the first run Compose builds it automatically.
+The `--build` flag rebuilds the images; on the first run Compose builds them automatically. The app is at `http://localhost:8000`, the MCP endpoint at `http://localhost:8100/mcp`. See [MCP.md](MCP.md) for connecting a client. For running two stacks on one host, see [MCP server](#mcp-server-optional).
 
 ## Portainer
 
@@ -107,13 +151,14 @@ Portainer clones the repo, builds the image from the included `Dockerfile`, and 
 
 #### Changing the published port
 
-The bundled compose publishes the host port via a variable: `"${HRSOT_HOST_PORT:-8000}:8000"`. If host port 8000 is already in use on your Docker host (a common cause of a `Bind for 0.0.0.0:8000 failed: port is already allocated` deploy error), add a stack **Environment variable**:
+The bundled compose publishes each host port via a variable — `"${HRSOT_HOST_PORT:-8000}:8000"` for the app and `"${HRMCP_HOST_PORT:-8100}:8100"` for the MCP server. If either host port is already in use on your Docker host (a common cause of a `Bind for 0.0.0.0:8000 failed: port is already allocated` deploy error), add stack **Environment variables**:
 
 | Name | Value |
 |---|---|
 | `HRSOT_HOST_PORT` | `8080` |
+| `HRMCP_HOST_PORT` | `8180` |
 
-The container still listens on 8000 internally (so the healthcheck is unaffected); only the host-side mapping changes. The app is then reachable at `http://<docker-host>:8080`. `HRSOT_HOST_PORT` is a Compose substitution variable — it has no effect unless the repo's `docker-compose.yml` references it, which it does on `main`.
+Each container still listens on its default port internally (so the healthchecks are unaffected); only the host-side mapping changes. The app is then reachable at `http://<docker-host>:8080` and the MCP endpoint at `http://<docker-host>:8180/mcp`. These are Compose substitution variables — they have no effect unless the repo's `docker-compose.yml` references them, which it does on `main`.
 
 The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags the result `demo-hr-sot:local`, persists `/data` to a **named volume** (`hrsot-data`), and sets `restart: unless-stopped` with the `/health` healthcheck. The named volume is important: the container runs as the non-root `hrsot` user (uid/gid 1000), and a fresh named volume inherits the image's `/data` ownership so the app can write its database and session secret. A host bind mount would be created root-owned and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`. Portainer creates and manages the `hrsot-data` volume for you; browse or back it up under **Volumes**.
 
@@ -189,6 +234,41 @@ Once the container is running and healthy (the `/health` endpoint returns 200), 
 6. **Hand the credentials and base URL to whoever is configuring the integration**. For Saviynt specifically, see [SAVIYNT_INTEGRATION.md](SAVIYNT_INTEGRATION.md).
 
 The app is now ready to serve as an HR data source. Employees, lookups, and credentials can all be managed via the UI or REST API.
+
+## MCP server (optional)
+
+The [MCP server](MCP.md) (`hr-mcp`) lets an AI assistant query HR data and run reports over the Model Context Protocol's streamable-HTTP transport. It's a thin, stateless gateway in front of the REST API: each tool forwards the caller's own API key to the app, so the app's scopes and audit log apply unchanged. It holds no data and needs no volume.
+
+With Docker Compose it comes up automatically alongside the app (see [Docker Compose](#docker-compose)); the endpoint is `http://<host>:8100/mcp`. To connect a client, create an API key in **Settings → API Keys** (the **Reporting / MCP** preset grants `employees:read` + `lookups:read` + `reports:read`) and point the client at the URL with an `Authorization: Bearer hrsot_...` header. Full client-config examples are in [MCP.md](MCP.md).
+
+### Running dev and prod on one Docker host
+
+Every port and container name is overridable, so a dev stack and a prod stack can coexist on the same host without collisions. Give each stack its own Compose project name (`-p`) and non-overlapping host ports:
+
+```bash
+# prod (defaults): app :8000, mcp :8100
+docker compose -p hrsot-prod up -d --build
+
+# dev: app :9000, mcp :9100, distinct container names
+HRSOT_HOST_PORT=9000 HRSOT_CONTAINER_NAME=dev-hr-sot \
+HRMCP_HOST_PORT=9100 HRMCP_CONTAINER_NAME=dev-hr-mcp \
+docker compose -p hrsot-dev up -d --build
+```
+
+Each project gets its own network, so within each one `hr-mcp` still resolves the app as `http://hr-sot:8000` regardless of the overridden container names. The `HRMCP_*` container-side settings (`HRMCP_BIND_PORT`, `HRMCP_PATH`, `HRMCP_HR_API_BASE_URL`, …) from the [environment variables](#mcp-server-hr-mcp-optional) table are also honored if you need to change the internal port or path.
+
+### On the cloud targets
+
+The cloud recipes below (Fargate, Azure, Cloud Run, Kubernetes) deploy the **app** container. The MCP server is optional and stateless, so if you want it in the cloud too, deploy it as a **second service** from `mcp_server/Dockerfile`: no volume, and set `HRMCP_HR_API_BASE_URL` to wherever the app is reachable (an internal service DNS name or the load-balancer URL). Unlike the app, it can run more than one replica since it holds no state. Put it behind TLS the same as the app.
+
+### Verifying the MCP server
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://<host>:8100/mcp
+# Expected: 406 (the streamable-HTTP endpoint is up; it only answers POST with the right Accept header)
+```
+
+A `406` (or `400`), not a connection refused or `5xx`, means the server is running. Its Docker healthcheck treats that as healthy.
 
 ## AWS ECS Fargate
 
@@ -402,6 +482,8 @@ Read the initial credentials file to confirm seeding worked:
 ```bash
 docker exec demo-hr-sot cat /data/INITIAL_CREDENTIALS.txt
 ```
+
+If you deployed the MCP server, verify it too — see [Verifying the MCP server](#verifying-the-mcp-server).
 
 ## Backups
 

@@ -43,12 +43,14 @@ Each key is granted a set of scopes. Endpoints require a specific scope; the wil
 | `lookups:write` | Create, update, delete lookup rows |
 | `users:read` | List/view console accounts |
 | `users:write` | Create, update, enable/disable console accounts |
+| `reports:read` | Run aggregate reports (headcount, org, activity) |
 | `backup:create` | Generate a backup |
 | `admin` | Full access to every API-key-authorized endpoint |
 
 **Presets** offered in the UI when creating a key:
 - **Employee Management** → `employees:read employees:write lookups:read`
-- **Read-Only (View All)** → `employees:read lookups:read users:read`
+- **Read-Only (View All)** → `employees:read lookups:read users:read reports:read`
+- **Reporting / MCP** → `employees:read lookups:read reports:read`
 - **Full Admin** → `admin`
 
 Create a scoped key via the API (session-authenticated admin request):
@@ -202,6 +204,40 @@ curl -X POST -H "Authorization: Bearer hrsot_..." \
 ```
 
 Restore is intentionally **not** exposed over the API — it is destructive and available only in the UI under **Settings → Backup & Restore**.
+
+### Reports
+
+Required scope: `reports:read`. Read-only aggregate views over employee and audit data. These also back the [MCP server](MCP.md)'s report tools.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/reports/headcount` | Employee counts grouped by a dimension |
+| GET | `/api/v1/reports/org` | Managers by span of control + org rollups |
+| GET | `/api/v1/reports/activity` | Audit-event counts over a trailing window |
+
+**Headcount** — `?group_by=` one of `department` (default), `location`, `status`, `job_title`, `country`; `?include_archived=true` to count archived employees too. Employees with no value for a nullable dimension (e.g. no location) are counted in an `Unassigned` bucket. Buckets are ordered by count, descending.
+
+```bash
+curl -H "Authorization: Bearer hrsot_..." \
+  "http://hr.example.com/api/v1/reports/headcount?group_by=department"
+```
+
+```json
+{
+  "group_by": "department",
+  "include_archived": false,
+  "total": 42,
+  "buckets": [
+    {"key": 1, "label": "Engineering", "count": 18},
+    {"key": 3, "label": "Sales", "count": 12}
+  ],
+  "generated_at": "2026-07-15T14:25:34Z"
+}
+```
+
+**Org** — `?limit=<n>` (default 50, max 500) caps the returned managers (largest span first). Rollups cover total employees, managers, individual contributors, employees without a supervisor, and average/max span.
+
+**Activity** — `?days=<n>` (default 7, range 1–365) sets the trailing window. Results are bucketed by category, event type, and outcome. Bounded by the app's audit-retention window (`HRSOT_AUDIT_RETENTION_DAYS`, default 30).
 
 ### Supervisors
 

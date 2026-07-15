@@ -6,6 +6,8 @@ The Demo HR Source of Truth App is a **single-process, single-container** applic
 
 This is the simplest architecture that satisfies the requirements. There is no separate API server, no separate frontend, no separate database container, no message queue, no cache layer. Every deployment target — local Docker, AWS, Azure, Kubernetes — runs the same single container.
 
+**One optional add-on:** an [MCP server](MCP.md) (`hr-mcp`) can run as a second, **stateless** container. It is a thin gateway that exposes read-only Model Context Protocol tools to AI assistants and forwards each call to the app's REST API using the caller's own API key. It holds no data and no database handle — the app remains the single source of truth and the only writer. It's entirely optional; the app runs identically with or without it.
+
 ## Component Diagram
 
 ```
@@ -47,6 +49,29 @@ This is the simplest architecture that satisfies the requirements. There is no s
                                                     │
                                               (REST API consumer)
 ```
+
+## MCP server (optional sidecar)
+
+When enabled, the MCP server runs as a separate container beside the app. It is a stateless proxy: no volume, no database, no credentials of its own.
+
+```
+  ┌──────────────┐   MCP (streamable HTTP)     ┌───────────────────────┐
+  │  AI assistant│   POST /mcp  :8100          │  hr-mcp container      │
+  │  (MCP client)│ ──────────────────────────► │  FastMCP gateway       │
+  └──────────────┘   Authorization: Bearer     │  (stateless, no data)  │
+                     hrsot_<api-key>            └───────────┬───────────┘
+                                                            │ same token
+                                                            │ forwarded as
+                                                            │ Bearer to REST
+                                                            ▼
+                                                ┌───────────────────────┐
+                                                │  hr-sot container      │
+                                                │  /api/v1/*  :8000      │
+                                                │  (auth, scopes, audit) │
+                                                └───────────────────────┘
+```
+
+Because the caller's token is forwarded unchanged, the app enforces the **same scopes** and writes the **same audit events** it would for any REST call — attributed to the specific API key. The MCP tools are read-only (employee/lookup reads plus the aggregate `reports` endpoints).
 
 ## Why this shape
 
@@ -98,16 +123,32 @@ Saviynt → GET /api/v1/employees
        → SQLAlchemy query → JSON response
 ```
 
+### MCP tool call (optional)
+
+```
+AI assistant → POST /mcp  (hr-mcp :8100)
+       → Authorization: Bearer hrsot_...
+       → FastMCP tool (e.g. headcount_report)
+       → forwards the SAME token as Bearer to hr-sot /api/v1/reports/...
+       → app validates key + scope (reports:read) → records audit event
+       → SQLAlchemy aggregate query → JSON
+       → returned to the assistant as the tool result
+```
+
 ## Deployment Topologies
 
-### Local Docker
+### Local Docker / Docker Compose
 
 ```
 Operator's machine
   └─ Docker Engine
-     └─ demo-hr-sot container :8000
-        └─ Bind mount: ./data → /data
+     ├─ demo-hr-sot container :8000
+     │    └─ Named volume: hrsot-data → /data
+     └─ demo-hr-mcp container :8100   (optional, stateless)
+          └─ HRMCP_HR_API_BASE_URL → http://hr-sot:8000
 ```
+
+The MCP container is optional and stateless. Ports and container names are env-overridable (`HRSOT_HOST_PORT`/`HRMCP_HOST_PORT`, `HRSOT_CONTAINER_NAME`/`HRMCP_CONTAINER_NAME`) so multiple stacks can share one host — see [DEPLOYMENT.md](DEPLOYMENT.md#mcp-server-optional).
 
 ### AWS ECS Fargate
 
@@ -155,6 +196,10 @@ All configuration is via environment variables. None are required for a default 
 | `HRSOT_INITIAL_ADMIN_PASSWORD` | `N0nPr0dF0r$@viynt8` | Override the seeded password |
 | `HRSOT_BIND_HOST` | `0.0.0.0` | Host to bind |
 | `HRSOT_BIND_PORT` | `8000` | Port to bind |
+
+The optional MCP server has its own `HRMCP_`-prefixed variables (`HRMCP_HR_API_BASE_URL`, `HRMCP_BIND_PORT`, `HRMCP_PATH`, …). See the [DEPLOYMENT.md environment-variables table](DEPLOYMENT.md#environment-variables) and [MCP.md](MCP.md).
+
+Unlike the app, the MCP server is stateless and **not** bound by the single-replica constraint below — it can be scaled horizontally since it holds no data.
 
 ## Scaling Considerations (Out of Scope for POC, Documented for Future)
 
