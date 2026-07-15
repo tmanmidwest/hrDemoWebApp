@@ -188,6 +188,23 @@ Full key format: `hrsot_<32-char-random>`. Shown to user only at creation. Keys 
 
 Issued JWTs are signed with an app-wide signing key stored in `/data/jwt_signing_key`. Generated on first startup if not present.
 
+## MCP Gateway Tokens
+
+Inbound bearer tokens external clients present to the [MCP server](MCP.md). Named and individually revocable, like API keys. The app syncs the active hashes to `/data/mcp_gateway_tokens.json` so the DB-less MCP container can verify them.
+
+| Column | Type | Required | Notes |
+|---|---|---|---|
+| `id` | INTEGER | PK | |
+| `name` | TEXT | Yes | Human-readable label (one per consuming client/project) |
+| `token_prefix` | TEXT | Yes | First 14 chars (`hrsotgw_` + 7), shown in UI for identification |
+| `token_hash` | TEXT | Yes | SHA-256 hash of the full token (unique) |
+| `created_by_user_id` | INTEGER | Yes | FK → `app_users.id` |
+| `created_at` | DATETIME | Yes | |
+| `updated_at` | DATETIME | Yes | |
+| `revoked_at` | DATETIME | No | Soft-revoke; removes it from the synced hash file |
+
+Full token format: `hrsotgw_<32-char-random>`. Shown to user only at creation. The MCP server's own **outbound** key is a normal `api_keys` row named "MCP Server" (mirrored to `/data/mcp_api_key`), not a separate table.
+
 ## Indexes
 
 - `employees.employee_number` (unique)
@@ -198,6 +215,7 @@ Issued JWTs are signed with an app-wide signing key stored in `/data/jwt_signing
 - `employees.last_name, first_name` (for default sort)
 - `app_users.username` (unique)
 - `api_keys.key_hash` (unique)
+- `mcp_gateway_tokens.token_hash` (unique)
 - `oauth_clients.client_id` (unique)
 
 ## Seed Data

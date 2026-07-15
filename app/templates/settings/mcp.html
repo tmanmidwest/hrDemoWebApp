@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% set page_title = "MCP Server" %}
+{% block breadcrumb %}<span>Settings</span> <span class="topbar__breadcrumb-sep">/</span> <span>MCP Server</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">MCP Server</h1>
+    <p class="page-header__subtitle">
+      Two separate credentials, both managed here — the MCP server reads them live from the
+      shared data volume, so you configure everything in this UI with no redeploy.
+    </p>
+  </div>
+</div>
+
+{# ===================== INBOUND: client → MCP server ===================== #}
+<h2 class="card__title" style="margin: var(--s-2) 0 var(--s-3);">Inbound — client access (e.g. Claude → MCP server)</h2>
+<p class="text-muted" style="max-width: 720px; margin-bottom: var(--s-4);">
+  Issue a separate bearer token per app or project that connects to the MCP server,
+  and revoke any one of them independently. Until at least one token exists the MCP
+  HTTP endpoint <strong>rejects every request</strong> (returns 503) — so it's safe to
+  deploy the MCP container before configuring it here.
+</p>
+
+{% if new_gateway_token %}
+<div class="secret-reveal" style="max-width: 720px;">
+  <div class="secret-reveal__label">New gateway token created — copy it now</div>
+  <div class="secret-reveal__value">{{ new_gateway_token }}</div>
+  <div class="secret-reveal__warning">
+    Paste this into the consuming client's <strong>Authorization / bearer token</strong> field.
+    This is the only time the full token is shown.
+  </div>
+</div>
+{% endif %}
+
+<div class="card" style="max-width: 720px; margin-bottom: var(--s-4);">
+  <div class="card__header"><h2 class="card__title">Gateway tokens</h2></div>
+  <form method="post" action="/ui/settings/mcp/gateway/tokens/new">
+    <div class="card__body" style="display:flex; gap: var(--s-3); align-items:flex-end;">
+      <div style="flex:1;">
+        <label class="label" for="gw-name">Token name</label>
+        <input class="input" id="gw-name" name="name" required style="width:100%;"
+               placeholder="e.g. Saviynt prod, Project Atlas, Reporting bot" />
+      </div>
+      <button class="btn btn--primary">+ Generate token</button>
+    </div>
+  </form>
+  {% if gateway_tokens %}
+  <div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Prefix</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th style="text-align:right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in gateway_tokens %}
+      <tr>
+        <td>{{ t.name }}</td>
+        <td class="mono text-muted">{{ t.token_prefix }}…</td>
+        <td>
+          {% if t.revoked_at %}<span class="badge badge--neutral">Revoked</span>
+          {% else %}<span class="badge badge--success">Active</span>{% endif %}
+        </td>
+        <td class="mono text-muted">{{ t.created_at.strftime("%Y-%m-%d") }}</td>
+        <td class="table__actions">
+          {% if not t.revoked_at %}
+          <form action="/ui/settings/mcp/gateway/tokens/{{ t.id }}/revoke" method="post" style="margin:0;"
+                onsubmit="return confirm('Revoke this gateway token? The client using it stops working immediately.');">
+            <button type="submit" class="btn btn--ghost btn--sm">Revoke</button>
+          </form>
+          {% endif %}
+          <form action="/ui/settings/mcp/gateway/tokens/{{ t.id }}/delete" method="post" style="margin:0;"
+                onsubmit="return confirm('Permanently delete this gateway token record?');">
+            <button type="submit" class="btn btn--ghost btn--sm" style="color: var(--danger);">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="card__body" style="padding-top:0;">
+    <p class="text-muted">No gateway tokens yet — generate one above to let a client connect.</p>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card" style="max-width: 720px; margin-bottom: var(--s-5);">
+  <div class="card__header"><h2 class="card__title">Connect a Claude client</h2></div>
+  <div class="card__body">
+    <p class="text-muted">Point Claude at this MCP server with one of the gateway tokens above.
+    In each example, replace <span class="mono">your-mcp-host</span> with wherever the MCP server
+    (<span class="mono">hr-mcp</span>) is reachable — default port <span class="mono">8100</span>,
+    path <span class="mono">/mcp</span> — and swap <span class="mono">&lt;paste-a-gateway-token&gt;</span>
+    for a token you generated. Click a block to select it.</p>
+
+    <div class="code-label">Claude Desktop — <span class="text-muted">add to <span class="mono">claude_desktop_config.json</span> (Settings → Developer → Edit Config), then restart. Requires Node.js.</span></div>
+{% raw %}<pre class="code-block">{
+  "mcpServers": {
+    "hr-sot": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://your-mcp-host:8100/mcp",
+        "--header",
+        "Authorization:${HRSOT_MCP_TOKEN}"
+      ],
+      "env": {
+        "HRSOT_MCP_TOKEN": "Bearer &lt;paste-a-gateway-token&gt;"
+      }
+    }
+  }
+}</pre>{% endraw %}
+    <p class="text-muted text-xs" style="margin-top: var(--s-2);">The token lives in <span class="mono">env</span> (spaces are fine there) while the header uses
+    <span class="mono">Authorization:${HRSOT_MCP_TOKEN}</span> with no space — a documented workaround for how
+    <span class="mono">npx</span> mangles spaces inside args on Claude Desktop/Windows.</p>
+
+    <div class="code-label">Claude Code — <span class="text-muted">one command:</span></div>
+{% raw %}<pre class="code-block">claude mcp add --transport http hr-sot https://your-mcp-host:8100/mcp \
+  --header "Authorization: Bearer &lt;paste-a-gateway-token&gt;"</pre>{% endraw %}
+    <div class="code-label">…or add to <span class="mono">.mcp.json</span> (project) / <span class="mono">~/.claude.json</span>:</div>
+{% raw %}<pre class="code-block">{
+  "mcpServers": {
+    "hr-sot": {
+      "type": "http",
+      "url": "https://your-mcp-host:8100/mcp",
+      "headers": {
+        "Authorization": "Bearer &lt;paste-a-gateway-token&gt;"
+      }
+    }
+  }
+}</pre>{% endraw %}
+  </div>
+</div>
+
+{# ===================== OUTBOUND: MCP server → app ===================== #}
+<h2 class="card__title" style="margin: var(--s-2) 0 var(--s-3);">Outbound — MCP server → this app's API</h2>
+<p class="text-muted" style="max-width: 720px; margin-bottom: var(--s-4);">
+  The MCP server calls this app's REST API with its own API key (granted only the
+  read scopes its tools need). Generate one here; the server reads it live from the
+  shared volume, so rotating it takes effect on the next call with no restart.
+</p>
+
+{% if new_token %}
+<div class="card" style="margin-bottom: var(--s-4); max-width: 720px;">
+  <div class="card__header"><h2 class="card__title">New API token</h2></div>
+  <div class="card__body">
+    <p class="text-muted">The MCP server reads this from disk automatically — you don't need to
+    paste it anywhere for the local server. Shown once.</p>
+    <input class="input mono" value="{{ new_token }}" readonly onclick="this.select()" style="width:100%;" />
+  </div>
+</div>
+{% endif %}
+
+<div class="card" style="max-width: 720px; margin-bottom: var(--s-5);">
+  <div class="card__body">
+    {% if status.configured %}
+    <div style="display:grid; grid-template-columns: 160px 1fr; gap: var(--s-3) var(--s-4);">
+      <div class="text-muted">API token</div><div class="mono">{{ status.prefix }}…
+        {% if status.revoked %}<span class="badge badge--danger">revoked</span>
+        {% elif not status.tracked %}<span class="badge badge--warning">unknown to DB</span>
+        {% else %}<span class="badge badge--success">active</span>{% endif %}</div>
+      <div class="text-muted">Created</div><div class="mono">{{ status.created_at.strftime("%Y-%m-%d %H:%M") if status.created_at else "—" }}</div>
+      <div class="text-muted">Last used</div><div class="mono">{{ status.last_used_at.strftime("%Y-%m-%d %H:%M") if status.last_used_at else "never" }}</div>
+      <div class="text-muted">Stored at</div><div class="mono text-xs">{{ status.path }}</div>
+    </div>
+    {% else %}
+    <p class="text-muted">No API token yet. Generate one so the MCP server can call this app.</p>
+    {% endif %}
+  </div>
+  <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
+    <form method="post" action="/ui/settings/mcp/rotate" style="margin:0;">
+      <button class="btn btn--primary"
+        {% if status.configured %}onclick="return confirm('Rotate the API token? The current one is revoked immediately; the MCP server switches to the new one on its next call.');"{% endif %}>
+        {{ "Rotate API token" if status.configured else "Generate API token" }}
+      </button>
+    </form>
+    {% if status.configured %}
+    <form method="post" action="/ui/settings/mcp/clear" style="margin:0;"
+          onsubmit="return confirm('Clear and revoke the API token? The MCP server can no longer reach the app until you generate a new one.');">
+      <button class="btn btn--ghost btn--sm" style="color:var(--danger);">Clear &amp; revoke</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="max-width: 720px;">
+  <div class="card__body">
+    <p class="text-muted text-xs">Both credentials live on the shared data volume and are read
+    live, so rotating needs no restart — as long as the MCP server shares this app's data
+    directory (same host / same Docker volume). For a <strong>remote</strong> MCP host that
+    can't see the volume, set <span class="mono">HRMCP_AUTH_TOKEN</span> (inbound) and
+    <span class="mono">HRMCP_API_KEY</span> (outbound) as env overrides there instead.</p>
+  </div>
+</div>
+
+<script>
+  // Click a code block to select its text for easy copying.
+  document.querySelectorAll('.code-block').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+  });
+</script>
+{% endblock %}

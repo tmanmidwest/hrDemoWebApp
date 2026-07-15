@@ -6,6 +6,30 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.1.0] — 2026-07-15
+
+### Changed
+
+**MCP server auth — two-token model + UI management**
+- The MCP server no longer forwards the caller's API key (pass-through). It now
+  uses **two credentials**, both created and rotated from a new **Settings → MCP**
+  page with no redeploy:
+  - **Outbound** — the server's own API key (an `api_keys` row named "MCP Server",
+    scoped to the read tools) that it uses to call the REST API. Written to
+    `/data/mcp_api_key`; rotate/clear from the UI.
+  - **Inbound** — named, individually revocable **gateway tokens** (new
+    `mcp_gateway_tokens` table, `hrsotgw_` prefix) that clients present to the MCP
+    server. Active hashes are synced to `/data/mcp_gateway_tokens.json`, which the
+    server verifies against live via an ASGI middleware. Until one exists the MCP
+    endpoint returns **503**; a wrong/missing token returns **401**.
+- The MCP container now mounts the app's data volume **read-only** to read those
+  two files (it still holds no database). `HRMCP_API_KEY` / `HRMCP_AUTH_TOKEN` env
+  overrides cover remote hosts that can't share the volume.
+- The MCP server's own key is flagged **MCP** and protected on the API Keys page
+  (managed from the MCP page instead).
+- New migration `0010_add_mcp_gateway_tokens`. Mirrors the design used in the
+  POC-Tracker app. See [docs/MCP.md](docs/MCP.md).
+
 ## [1.0.0] — 2026-07-15
 
 First stable release. Consolidates the employee source-of-truth, web UI, REST

@@ -16,6 +16,7 @@ from app.models.employee import Employee
 from app.models.employment_status import EmploymentStatus
 from app.models.job_title import JobTitle
 from app.models.location import Location
+from app.models.mcp_gateway_token import McpGatewayToken
 from app.models.oauth_client import OAuthClient
 from app.models.state_province import StateProvince
 from app.models.user_identity import UserIdentity
@@ -33,6 +34,7 @@ __all__ = [
     "EmploymentStatus",
     "JobTitle",
     "Location",
+    "McpGatewayToken",
     "OAuthClient",
     "StateProvince",
     "UserIdentity",

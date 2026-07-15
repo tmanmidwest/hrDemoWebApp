@@ -47,7 +47,9 @@
   <tbody>
     {% for k in keys %}
     <tr>
-      <td>{{ k.name }}</td>
+      <td>{{ k.name }}
+        {% if k.id == mcp_key_id %}<span class="badge badge--warning text-xs">MCP</span>{% endif %}
+      </td>
       <td class="mono text-muted">{{ k.key_prefix }}…</td>
       <td>
         {% for scope in k.scopes.split() %}
@@ -61,6 +63,9 @@
       <td class="mono text-muted">{{ k.created_at.strftime("%Y-%m-%d") }}</td>
       <td class="mono text-muted">{{ k.last_used_at.strftime("%Y-%m-%d %H:%M") if k.last_used_at else "—" }}</td>
       <td class="table__actions">
+        {% if k.id == mcp_key_id %}
+        <a href="/ui/settings/mcp" class="btn btn--ghost btn--sm">Manage on MCP page</a>
+        {% else %}
         {% if not k.revoked_at %}
         <form action="/ui/settings/api-keys/{{ k.id }}/revoke" method="post" style="margin:0;"
               onsubmit="return confirm('Revoke this API key? Integrations using it will stop working immediately.');">
@@ -71,6 +76,7 @@
               onsubmit="return confirm('Permanently delete this API key record?');">
           <button type="submit" class="btn btn--ghost btn--sm" style="color: var(--danger);">Delete</button>
         </form>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}

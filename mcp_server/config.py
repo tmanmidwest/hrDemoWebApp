@@ -10,6 +10,7 @@ container names / upstream URLs).
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,6 +37,41 @@ class Settings(BaseSettings):
     )
     request_timeout_seconds: float = Field(
         default=30.0, description="Per-request timeout when calling the HR API."
+    )
+
+    # --- Shared data volume (token files written by the app) ---
+    data_dir: Path = Field(
+        default=Path("/data"),
+        description=(
+            "Path where the app writes the MCP token files this server reads: "
+            "the outbound service key (mcp_api_key) and the active inbound gateway "
+            "token hashes (mcp_gateway_tokens.json). Mount the app's data volume "
+            "here (read-only is fine)."
+        ),
+    )
+
+    # --- Outbound service token (server → app), managed in the app UI ---
+    api_key: str | None = Field(
+        default=None,
+        description=(
+            "Static outbound API key override. If set, used instead of the "
+            "UI-managed mcp_api_key file — for a remote MCP host that can't see "
+            "the data volume."
+        ),
+    )
+    api_key_file: str | None = Field(
+        default=None,
+        description="Path to a file holding the outbound API key (overrides the default location).",
+    )
+
+    # --- Inbound gateway auth (client → server), managed in the app UI ---
+    auth_token: str | None = Field(
+        default=None,
+        description=(
+            "Static inbound bearer-token override. If set, accepted in addition "
+            "to the UI-managed gateway tokens — for a remote host that can't see "
+            "the data volume."
+        ),
     )
 
     # --- Bind ---

@@ -6,7 +6,7 @@ The Demo HR Source of Truth App is a **single-process, single-container** applic
 
 This is the simplest architecture that satisfies the requirements. There is no separate API server, no separate frontend, no separate database container, no message queue, no cache layer. Every deployment target — local Docker, AWS, Azure, Kubernetes — runs the same single container.
 
-**One optional add-on:** an [MCP server](MCP.md) (`hr-mcp`) can run as a second, **stateless** container. It is a thin gateway that exposes read-only Model Context Protocol tools to AI assistants and forwards each call to the app's REST API using the caller's own API key. It holds no data and no database handle — the app remains the single source of truth and the only writer. It's entirely optional; the app runs identically with or without it.
+**One optional add-on:** an [MCP server](MCP.md) (`hr-mcp`) can run as a second, **stateless** container. It is a thin gateway that exposes read-only Model Context Protocol tools to AI assistants and calls the app's REST API on their behalf. It holds no database handle — the app remains the single source of truth and the only writer. It uses two credentials, both managed in the app UI (Settings → MCP) and read from the app's data volume: its own outbound API key (to call the app) and a set of inbound gateway tokens (that clients present to it). It's entirely optional; the app runs identically with or without it.
 
 ## Component Diagram
 
@@ -52,26 +52,36 @@ This is the simplest architecture that satisfies the requirements. There is no s
 
 ## MCP server (optional sidecar)
 
-When enabled, the MCP server runs as a separate container beside the app. It is a stateless proxy: no volume, no database, no credentials of its own.
+When enabled, the MCP server runs as a separate container beside the app. It holds no database and no baked-in secrets: it mounts the app's data volume read-only and reads its two credentials from there, both managed in the app UI (Settings → MCP).
 
 ```
   ┌──────────────┐   MCP (streamable HTTP)     ┌───────────────────────┐
   │  AI assistant│   POST /mcp  :8100          │  hr-mcp container      │
   │  (MCP client)│ ──────────────────────────► │  FastMCP gateway       │
-  └──────────────┘   Authorization: Bearer     │  (stateless, no data)  │
-                     hrsot_<api-key>            └───────────┬───────────┘
-                                                            │ same token
-                                                            │ forwarded as
-                                                            │ Bearer to REST
+  └──────────────┘   Authorization: Bearer     │                       │
+                     hrsotgw_<gateway-token>    │  GatewayAuthMiddleware│
+                            (inbound)           │  verifies inbound     │
+                                                │  token vs synced file │
+                                                └───────────┬───────────┘
+                                                            │ outbound: its OWN
+                                                            │ hrsot_ service key
+                                                            │ (from mcp_api_key)
                                                             ▼
                                                 ┌───────────────────────┐
                                                 │  hr-sot container      │
                                                 │  /api/v1/*  :8000      │
                                                 │  (auth, scopes, audit) │
                                                 └───────────────────────┘
+             ▲ reads both token files from the shared /data volume (:ro):
+             └── mcp_api_key (outbound key) · mcp_gateway_tokens.json (inbound hashes)
 ```
 
-Because the caller's token is forwarded unchanged, the app enforces the **same scopes** and writes the **same audit events** it would for any REST call — attributed to the specific API key. The MCP tools are read-only (employee/lookup reads plus the aggregate `reports` endpoints).
+Two credentials, both created/rotated in Settings → MCP:
+
+* **Inbound** — clients present a **gateway token** (`hrsotgw_…`); `GatewayAuthMiddleware` verifies its hash against `mcp_gateway_tokens.json`, which the app rewrites on every create/revoke. No token configured → the endpoint answers **503**; wrong token → **401**.
+* **Outbound** — the server calls the REST API with its **own** `hrsot_` API key (from `mcp_api_key`), scoped to the read tools. So app calls are attributed to the "MCP Server" key, and the app enforces its scopes and writes its usual audit events.
+
+The MCP tools are read-only (employee/lookup reads plus the aggregate `reports` endpoints).
 
 ## Why this shape
 
@@ -127,9 +137,10 @@ Saviynt → GET /api/v1/employees
 
 ```
 AI assistant → POST /mcp  (hr-mcp :8100)
-       → Authorization: Bearer hrsot_...
+       → Authorization: Bearer hrsotgw_...        (inbound gateway token)
+       → GatewayAuthMiddleware verifies it vs mcp_gateway_tokens.json  (else 503/401)
        → FastMCP tool (e.g. headcount_report)
-       → forwards the SAME token as Bearer to hr-sot /api/v1/reports/...
+       → calls hr-sot /api/v1/reports/... with the server's OWN hrsot_ key
        → app validates key + scope (reports:read) → records audit event
        → SQLAlchemy aggregate query → JSON
        → returned to the assistant as the tool result
@@ -143,9 +154,10 @@ AI assistant → POST /mcp  (hr-mcp :8100)
 Operator's machine
   └─ Docker Engine
      ├─ demo-hr-sot container :8000
-     │    └─ Named volume: hrsot-data → /data
+     │    └─ Named volume: hrsot-data → /data   (read-write)
      └─ demo-hr-mcp container :8100   (optional, stateless)
-          └─ HRMCP_HR_API_BASE_URL → http://hr-sot:8000
+          ├─ HRMCP_HR_API_BASE_URL → http://hr-sot:8000
+          └─ Same volume: hrsot-data → /data   (read-only, for the token files)
 ```
 
 The MCP container is optional and stateless. Ports and container names are env-overridable (`HRSOT_HOST_PORT`/`HRMCP_HOST_PORT`, `HRSOT_CONTAINER_NAME`/`HRMCP_CONTAINER_NAME`) so multiple stacks can share one host — see [DEPLOYMENT.md](DEPLOYMENT.md#mcp-server-optional).

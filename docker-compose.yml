@@ -41,10 +41,17 @@ services:
     # and prod MCP servers on one host, e.g. HRMCP_HOST_PORT=9026 -> 9026:8100.
     ports:
       - "${HRMCP_HOST_PORT:-8100}:8100"
+    volumes:
+      # Read-only: the MCP server reads its token files from the app's data volume
+      # (mcp_api_key for outbound, mcp_gateway_tokens.json for inbound gateway
+      # auth), both written by the app. Same uid (1000) so the 0600 files are
+      # readable. It never writes here.
+      - hrsot-data:/data:ro
     environment:
       # Reaches the app by its compose service name on the project network, so
       # this stays correct even if HRSOT_CONTAINER_NAME is overridden.
       HRMCP_HR_API_BASE_URL: http://hr-sot:8000
+      HRMCP_DATA_DIR: /data
       HRMCP_PATH: ${HRMCP_PATH:-/mcp}
       HRMCP_LOG_LEVEL: INFO
     restart: unless-stopped

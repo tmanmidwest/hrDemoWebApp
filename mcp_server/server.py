@@ -2,20 +2,20 @@
 
 Design
 ------
-This server is a thin, **stateless** proxy. It exposes read-only MCP tools that
-each forward the *caller's own* ``Authorization: Bearer`` token to the HR SoT
-REST API and return the JSON response. It holds no service-account credentials
-and no database handle of its own:
+This server is a small, **stateless** proxy that exposes read-only MCP tools over
+the HR REST API. It uses two credentials, both created and rotated in the app UI
+(Settings → MCP) and read live from the shared data volume — this container holds
+no database and needs no secrets baked in at deploy time:
 
-* The MCP client is configured with an ``hrsot_`` API key (created in the HR
-  app's Settings → API Keys, scoped to e.g. ``reports:read`` + ``employees:read``).
-* That token rides along on every tool call, so the HR app enforces the exact
-  same scopes and records the exact same audit trail it would for any REST call.
-  Attribution is per-key, not per-gateway.
+* **Outbound** (server → app): its own API key, written by the app to
+  ``<data_dir>/mcp_api_key``. Every tool call authenticates to the REST API with
+  it. See :func:`_resolve_service_token`.
+* **Inbound** (client → server): callers must present a **gateway token**; the
+  :class:`~mcp_server.gateway_auth.GatewayAuthMiddleware` validates it against the
+  app-synced ``<data_dir>/mcp_gateway_tokens.json``.
 
-Because auth and data both live in the HR app, running this next to it is safe:
-scale it, restart it, or point it at a different HR instance without touching
-the source of truth.
+Both are read fresh on each request, so rotating either in the UI takes effect on
+the very next call with no restart.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import logging
 from typing import Any
 
 import httpx
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp import FastMCP
 
 from mcp_server.config import get_settings
 
@@ -43,8 +43,7 @@ mcp = FastMCP(
     instructions=(
         "Query the Demo HR Source-of-Truth system: list employees and lookups, "
         "and run aggregate headcount, org-structure, and activity reports. All "
-        "tools are read-only. Requests are authorized with the API key the client "
-        "was configured with."
+        "tools are read-only."
     ),
     host=settings.bind_host,
     port=settings.bind_port,
@@ -71,36 +70,44 @@ class ToolError(Exception):
     """Raised to surface a clean, actionable error message to the MCP client."""
 
 
-def _bearer_from_ctx(ctx: Context) -> str | None:
-    """Pull the Bearer token out of the inbound HTTP request, or None."""
-    request = getattr(ctx.request_context, "request", None)
-    if request is None:
-        return None
-    header = request.headers.get("authorization")
-    if not header:
-        return None
-    parts = header.split(None, 1)
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-    return parts[1].strip()
+def _resolve_service_token() -> str | None:
+    """Resolve the outbound API token (server → app), freshly each call.
 
-
-async def _get(ctx: Context, path: str, params: dict[str, Any] | None = None) -> Any:
-    """Forward a GET to the HR API with the caller's token; return parsed JSON.
-
-    Raises ToolError with a helpful message on missing/invalid auth or an
-    upstream error, so the model sees why a call failed instead of a raw stack.
+    Order: HRMCP_API_KEY (static override) → HRMCP_API_KEY_FILE → the UI-managed
+    ``<data_dir>/mcp_api_key`` file. Reading live means rotating the token in the
+    app UI takes effect on the very next call, no restart.
     """
-    token = _bearer_from_ctx(ctx)
+    if settings.api_key:
+        return settings.api_key
+    candidates = []
+    if settings.api_key_file:
+        candidates.append(settings.api_key_file)
+    candidates.append(str(settings.data_dir / "mcp_api_key"))
+    from pathlib import Path
+
+    for raw in candidates:
+        path = Path(raw)
+        if path.exists():
+            value = path.read_text().strip()
+            if value:
+                return value
+    return None
+
+
+async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
+    """GET the HR API with the server's service token; return parsed JSON.
+
+    Raises ToolError with a helpful message on missing/invalid auth or an upstream
+    error, so the model sees why a call failed instead of a raw stack.
+    """
+    token = _resolve_service_token()
     if not token:
         raise ToolError(
-            "No API token was provided. Configure this MCP server in your client "
-            "with an 'Authorization: Bearer hrsot_...' header — an HR SoT API key "
-            "(Settings → API Keys) scoped for the data you want (e.g. reports:read, "
-            "employees:read, lookups:read)."
+            "The MCP server has no API token to reach the app. An admin needs to "
+            "generate one in the app UI (Settings → MCP → Generate API token), or "
+            "set HRMCP_API_KEY / HRMCP_API_KEY_FILE for a remote host."
         )
 
-    # Drop unset (None) params so we don't send empty query values.
     clean = {k: v for k, v in (params or {}).items() if v is not None}
     try:
         resp = await _get_client().get(
@@ -113,13 +120,12 @@ async def _get(ctx: Context, path: str, params: dict[str, Any] | None = None) ->
 
     if resp.status_code == 401:
         raise ToolError(
-            "The HR API rejected the token (401). The API key may be invalid, "
-            "revoked, or expired."
+            "The HR API rejected the MCP server's token (401). Rotate it in the "
+            "app UI (Settings → MCP)."
         )
     if resp.status_code == 403:
         raise ToolError(
-            "The API key lacks the scope required for this data (403). Grant the "
-            "key the needed scope (e.g. reports:read) in the HR app."
+            "The MCP server's token lacks the scope required for this data (403)."
         )
     if resp.status_code == 404:
         raise ToolError("Not found (404).")
@@ -135,7 +141,6 @@ async def _get(ctx: Context, path: str, params: dict[str, Any] | None = None) ->
 
 @mcp.tool()
 async def list_employees(
-    ctx: Context,
     limit: int = 50,
     offset: int = 0,
     include_archived: bool = False,
@@ -149,10 +154,8 @@ async def list_employees(
 
     `updated_since` is an ISO-8601 datetime for incremental views. Archived
     (soft-deleted) employees are excluded unless `include_archived` is true.
-    Requires the `employees:read` scope on the API key.
     """
     return await _get(
-        ctx,
         "/api/v1/employees/",
         {
             "limit": limit,
@@ -168,11 +171,11 @@ async def list_employees(
 
 
 @mcp.tool()
-async def get_employee(ctx: Context, employee_id: int) -> Any:
+async def get_employee(employee_id: int) -> Any:
     """Get a single employee (with nested department, title, status, location,
-    supervisor) by numeric id. Requires the `employees:read` scope.
+    supervisor) by numeric id.
     """
-    return await _get(ctx, f"/api/v1/employees/{employee_id}")
+    return await _get(f"/api/v1/employees/{employee_id}")
 
 
 # ---------------------------------------------------------------------------
@@ -190,11 +193,11 @@ _LOOKUP_PATHS = {
 
 
 @mcp.tool()
-async def list_lookups(ctx: Context, kind: str) -> Any:
+async def list_lookups(kind: str) -> Any:
     """List reference/lookup records used across employee data.
 
     `kind` is one of: countries, states, statuses, departments, job_titles,
-    locations. Requires the `lookups:read` scope on the API key.
+    locations.
     """
     path = _LOOKUP_PATHS.get(kind)
     if path is None:
@@ -202,7 +205,7 @@ async def list_lookups(ctx: Context, kind: str) -> Any:
             f"Unknown lookup kind '{kind}'. Choose one of: "
             + ", ".join(sorted(_LOOKUP_PATHS))
         )
-    return await _get(ctx, path)
+    return await _get(path)
 
 
 # ---------------------------------------------------------------------------
@@ -212,48 +215,59 @@ async def list_lookups(ctx: Context, kind: str) -> Any:
 
 @mcp.tool()
 async def headcount_report(
-    ctx: Context, group_by: str = "department", include_archived: bool = False
+    group_by: str = "department", include_archived: bool = False
 ) -> Any:
     """Employee headcount grouped by a dimension.
 
     `group_by` is one of: department, location, status, job_title, country.
-    Returns per-group counts plus a total. Requires the `reports:read` scope.
+    Returns per-group counts plus a total.
     """
     return await _get(
-        ctx,
         "/api/v1/reports/headcount",
         {"group_by": group_by, "include_archived": include_archived},
     )
 
 
 @mcp.tool()
-async def org_report(ctx: Context, limit: int = 50) -> Any:
+async def org_report(limit: int = 50) -> Any:
     """Org-structure summary: managers ranked by span of control, plus rollups
     (total employees, managers, individual contributors, avg/max span).
-    Requires the `reports:read` scope.
     """
-    return await _get(ctx, "/api/v1/reports/org", {"limit": limit})
+    return await _get("/api/v1/reports/org", {"limit": limit})
 
 
 @mcp.tool()
-async def activity_report(ctx: Context, days: int = 7) -> Any:
+async def activity_report(days: int = 7) -> Any:
     """Summary of audit/activity events over a trailing window of `days`,
-    bucketed by category, event type, and outcome. Requires the `reports:read`
-    scope.
+    bucketed by category, event type, and outcome.
     """
-    return await _get(ctx, "/api/v1/reports/activity", {"days": days})
+    return await _get("/api/v1/reports/activity", {"days": days})
 
 
 def main() -> None:
-    """Run the MCP server over streamable HTTP."""
+    """Run the MCP server over streamable HTTP, behind inbound gateway auth."""
+    import uvicorn
+
+    from mcp_server.gateway_auth import GatewayAuthMiddleware
+
     log.info(
-        "hrsot_mcp_starting host=%s port=%s path=%s upstream=%s",
+        "hrsot_mcp_starting host=%s port=%s path=%s upstream=%s data_dir=%s",
         settings.bind_host,
         settings.bind_port,
         settings.path,
         settings.hr_api_base_url,
+        settings.data_dir,
     )
-    mcp.run(transport="streamable-http")
+    # Wrap FastMCP's streamable-HTTP ASGI app with our inbound bearer-auth check.
+    # Non-HTTP scopes (lifespan) pass through so the session manager still starts.
+    app = GatewayAuthMiddleware(mcp.streamable_http_app())
+    uvicorn.run(
+        app,
+        host=settings.bind_host,
+        port=settings.bind_port,
+        log_level=settings.log_level.lower(),
+        access_log=False,
+    )
 
 
 if __name__ == "__main__":

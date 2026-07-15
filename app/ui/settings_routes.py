@@ -26,9 +26,8 @@ from app.models.audit_event import AuditEvent
 from app.models.auth_provider import DEFAULT_SCOPES
 from app.services import backup as backup_service
 from app.services import branding as branding_service
+from app.services import mcp_gateway_tokens, mcp_token, seed_data, system_config
 from app.services import scopes as scope_service
-from app.services import seed_data
-from app.services import system_config
 from app.services.audit import prune_old_events, record_event
 from app.services.oidc import callback_url
 from app.services.passwords import hash_password
@@ -456,6 +455,8 @@ def list_api_keys(
         active_subsection="api_keys",
         keys=keys,
         new_key=new_key,
+        # The MCP server's own key is managed on the MCP page; flag+protect it here.
+        mcp_key_id=mcp_token.current_key_id(db),
     )
 
 
@@ -536,6 +537,13 @@ def revoke_api_key(
     key = db.get(ApiKey, key_id)
     if key is None:
         raise HTTPException(status_code=404, detail="API key not found.")
+    if key_id == mcp_token.current_key_id(db):
+        flash(
+            request,
+            "That's the MCP server's key — manage it on the MCP page.",
+            "warning",
+        )
+        return RedirectResponse(url="/ui/settings/mcp", status_code=303)
     if key.revoked_at is None:
         key.revoked_at = datetime.now(UTC)
         db.commit()
@@ -563,6 +571,13 @@ def delete_api_key(
     key = db.get(ApiKey, key_id)
     if key is None:
         raise HTTPException(status_code=404, detail="API key not found.")
+    if key_id == mcp_token.current_key_id(db):
+        flash(
+            request,
+            "That's the MCP server's key — manage it on the MCP page.",
+            "warning",
+        )
+        return RedirectResponse(url="/ui/settings/mcp", status_code=303)
     name = key.name
     db.delete(key)
     db.commit()
@@ -578,6 +593,149 @@ def delete_api_key(
     )
     flash(request, f"Deleted API key '{name}'.", "success")
     return RedirectResponse(url="/ui/settings/api-keys", status_code=303)
+
+
+# ===========================================================================
+# MCP server — outbound API token + inbound gateway tokens
+# ===========================================================================
+
+
+@router.get("/mcp")
+def show_mcp_token(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    """Settings → MCP: manage the MCP server's two credentials."""
+    return render(
+        request,
+        "settings/mcp.html",
+        current_user=user,
+        active_subsection="mcp",
+        status=mcp_token.status(db),
+        new_token=request.session.pop("_revealed_mcp_token", None),
+        gateway_tokens=mcp_gateway_tokens.list_tokens(db),
+        new_gateway_token=request.session.pop("_revealed_gateway_token", None),
+    )
+
+
+# --- Outbound service token (MCP server → this app) ---
+
+
+@router.post("/mcp/rotate")
+def rotate_mcp_token(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    full_key = mcp_token.rotate(db, actor_id=user.id)
+    _settings_event(
+        request, user,
+        category="mcp",
+        event_type="mcp.token.rotated",
+        target_type="mcp_token",
+        target_label=mcp_token.MCP_KEY_NAME,
+        message="Rotated the MCP server API token",
+    )
+    request.session["_revealed_mcp_token"] = full_key
+    flash(request, "Generated a new MCP API token.", "success")
+    return RedirectResponse(url="/ui/settings/mcp", status_code=303)
+
+
+@router.post("/mcp/clear")
+def clear_mcp_token(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    existed = mcp_token.clear(db)
+    if existed:
+        _settings_event(
+            request, user,
+            category="mcp",
+            event_type="mcp.token.cleared",
+            target_type="mcp_token",
+            target_label=mcp_token.MCP_KEY_NAME,
+            message="Cleared and revoked the MCP server API token",
+        )
+        flash(request, "Cleared and revoked the MCP API token.", "success")
+    return RedirectResponse(url="/ui/settings/mcp", status_code=303)
+
+
+# --- Inbound gateway tokens (clients → MCP server) ---
+
+
+@router.post("/mcp/gateway/tokens/new")
+def create_gateway_token(
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    label = name.strip()
+    if not label:
+        flash(request, "Give the gateway token a name.", "error")
+        return RedirectResponse(url="/ui/settings/mcp", status_code=303)
+    row, full = mcp_gateway_tokens.create(db, name=label, actor_id=user.id)
+    _settings_event(
+        request, user,
+        category="mcp",
+        event_type="mcp.gateway_token.created",
+        target_type="mcp_gateway_token",
+        target_id=row.id,
+        target_label=row.name,
+        message=f"Created MCP gateway token '{row.name}'",
+        detail={"prefix": row.token_prefix},
+    )
+    request.session["_revealed_gateway_token"] = full
+    flash(request, f"Created gateway token '{row.name}'.", "success")
+    return RedirectResponse(url="/ui/settings/mcp", status_code=303)
+
+
+@router.post("/mcp/gateway/tokens/{token_id}/revoke")
+def revoke_gateway_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    row = mcp_gateway_tokens.revoke(db, token_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Gateway token not found.")
+    _settings_event(
+        request, user,
+        category="mcp",
+        event_type="mcp.gateway_token.revoked",
+        target_type="mcp_gateway_token",
+        target_id=row.id,
+        target_label=row.name,
+        message=f"Revoked MCP gateway token '{row.name}'",
+    )
+    flash(request, f"Revoked gateway token '{row.name}'.", "success")
+    return RedirectResponse(url="/ui/settings/mcp", status_code=303)
+
+
+@router.post("/mcp/gateway/tokens/{token_id}/delete")
+def delete_gateway_token(
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    name = mcp_gateway_tokens.delete(db, token_id)
+    if name is None:
+        raise HTTPException(status_code=404, detail="Gateway token not found.")
+    _settings_event(
+        request, user,
+        category="mcp",
+        event_type="mcp.gateway_token.deleted",
+        target_type="mcp_gateway_token",
+        target_id=token_id,
+        target_label=name,
+        message=f"Deleted MCP gateway token '{name}'",
+    )
+    flash(request, f"Deleted gateway token '{name}'.", "success")
+    return RedirectResponse(url="/ui/settings/mcp", status_code=303)
 
 
 # ===========================================================================

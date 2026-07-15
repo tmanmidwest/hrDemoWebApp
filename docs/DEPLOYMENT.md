@@ -30,8 +30,11 @@ None are required for a working deployment.
 ### MCP server (`hr-mcp`, optional)
 
 The [MCP server](MCP.md) is a separate, **stateless** container that proxies MCP
-tool calls to the app's REST API. It needs no volume and stores no data. It is
-configured with `HRMCP_`-prefixed variables:
+tool calls to the app's REST API. It stores no data, but it does mount the app's
+data volume **read-only** to read its two credentials (both created in the app UI
+under Settings → MCP): an outbound API key (`mcp_api_key`) it uses to call the app,
+and the active inbound gateway-token hashes (`mcp_gateway_tokens.json`) it checks
+callers against. It is configured with `HRMCP_`-prefixed variables:
 
 **To change the inbound (published) port, set `HRMCP_HOST_PORT`** — that's the
 host-side port you connect to. With Compose the container always listens on
@@ -49,11 +52,16 @@ The server itself reads these `HRMCP_`-prefixed variables:
 | Variable | Default | Purpose |
 |---|---|---|
 | `HRMCP_HR_API_BASE_URL` | `http://hr-sot:8000` | Upstream app base URL the server proxies to |
+| `HRMCP_DATA_DIR` | `/data` | Shared volume where the app writes the token files this server reads |
 | `HRMCP_PATH` | `/mcp` | URL path of the streamable-HTTP endpoint |
 | `HRMCP_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request timeout to the app |
 | `HRMCP_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `HRMCP_BIND_HOST` | `0.0.0.0` | Host to bind inside the container |
 | `HRMCP_BIND_PORT` | `8100` | Port the server process listens on. In Compose the published mapping is fixed to `:8100`, so leave this alone there and use `HRMCP_HOST_PORT`; it's only useful when running the server **without** Docker (`python -m mcp_server`). |
+
+For a **remote** MCP host that can't share the data volume, supply the two
+credentials as env overrides instead of via the UI files: `HRMCP_API_KEY` (the
+outbound `hrsot_` key) and `HRMCP_AUTH_TOKEN` (a single static inbound bearer).
 
 None are required.
 
@@ -110,8 +118,11 @@ services:
         condition: service_healthy   # wait for the app before serving tools
     ports:
       - "${HRMCP_HOST_PORT:-8100}:8100"   # container always listens on 8100
+    volumes:
+      - hrsot-data:/data:ro   # read-only: reads its token files, never writes
     environment:
       HRMCP_HR_API_BASE_URL: http://hr-sot:8000   # reaches the app by service name
+      HRMCP_DATA_DIR: /data
       HRMCP_PATH: ${HRMCP_PATH:-/mcp}
       HRMCP_LOG_LEVEL: INFO
     restart: unless-stopped
@@ -239,6 +250,7 @@ Once the container is running and healthy (the `/health` endpoint returns 200), 
 5. **Create the credentials your integrating system will use**:
    - For Saviynt-style API key auth: Settings → API Keys → **Create New API Key**. Name it after the consuming system. Copy the displayed `hrsot_...` value — it is shown in full **only once**.
    - For OAuth 2.0: Settings → OAuth Clients → **Create New OAuth Client**. Copy the displayed `client_id` and `client_secret` — secret is shown once.
+   - For MCP (AI assistant) access: Settings → MCP → generate the API token (outbound) and a gateway token (inbound). See [MCP server](#mcp-server-optional).
 
 6. **Hand the credentials and base URL to whoever is configuring the integration**. For Saviynt specifically, see [SAVIYNT_INTEGRATION.md](SAVIYNT_INTEGRATION.md).
 
@@ -246,9 +258,12 @@ The app is now ready to serve as an HR data source. Employees, lookups, and cred
 
 ## MCP server (optional)
 
-The [MCP server](MCP.md) (`hr-mcp`) lets an AI assistant query HR data and run reports over the Model Context Protocol's streamable-HTTP transport. It's a thin, stateless gateway in front of the REST API: each tool forwards the caller's own API key to the app, so the app's scopes and audit log apply unchanged. It holds no data and needs no volume.
+The [MCP server](MCP.md) (`hr-mcp`) lets an AI assistant query HR data and run reports over the Model Context Protocol's streamable-HTTP transport. It's a thin, stateless gateway in front of the REST API. It uses **two credentials**, both created in the app UI under **Settings → MCP** and read live from the app's data volume (mounted read-only):
 
-With Docker Compose it comes up automatically alongside the app (see [Docker Compose](#docker-compose)); the endpoint is `http://<host>:8100/mcp`. To connect a client, create an API key in **Settings → API Keys** (the **Reporting / MCP** preset grants `employees:read` + `lookups:read` + `reports:read`) and point the client at the URL with an `Authorization: Bearer hrsot_...` header. Full client-config examples are in [MCP.md](MCP.md).
+- an **outbound service token** (an `hrsot_` API key it uses to call the app, scoped to the read tools), and
+- **inbound gateway tokens** — named, individually revocable bearer tokens that clients present to reach the MCP server.
+
+With Docker Compose it comes up automatically alongside the app (see [Docker Compose](#docker-compose)); the endpoint is `http://<host>:8100/mcp`. It returns **503 until you generate a gateway token**, so it's safe to deploy first. Then, in **Settings → MCP**: click *Generate API token* (outbound), add a *Gateway token* (inbound), and point your client at the URL with `Authorization: Bearer hrsotgw_...`. Full setup and client-config examples are in [MCP.md](MCP.md).
 
 ### Running dev and prod on one Docker host
 
@@ -268,16 +283,16 @@ docker compose -p hrsot-dev up -d --build
 
 ### On the cloud targets
 
-The cloud recipes below (Fargate, Azure, Cloud Run, Kubernetes) deploy the **app** container. The MCP server is optional and stateless, so if you want it in the cloud too, deploy it as a **second service** from `mcp_server/Dockerfile`: no volume, and set `HRMCP_HR_API_BASE_URL` to wherever the app is reachable (an internal service DNS name or the load-balancer URL). Unlike the app, it can run more than one replica since it holds no state. Put it behind TLS the same as the app.
+The cloud recipes below (Fargate, Azure, Cloud Run, Kubernetes) deploy the **app** container. The MCP server is optional; if you want it in the cloud too, deploy it as a **second service** from `mcp_server/Dockerfile` and set `HRMCP_HR_API_BASE_URL` to wherever the app is reachable (an internal service DNS name or the load-balancer URL). It needs its two credentials one of two ways: **mount the app's data volume read-only** at `/data` (as Compose does — simplest when both run on the same orchestrator/EFS), or, when a shared volume isn't practical, set the **env overrides** `HRMCP_API_KEY` (outbound) and `HRMCP_AUTH_TOKEN` (inbound). It holds no per-request state, so it can run multiple replicas. Put it behind TLS the same as the app.
 
 ### Verifying the MCP server
 
 ```bash
 curl -sS -o /dev/null -w '%{http_code}\n' http://<host>:8100/mcp
-# Expected: 406 (the streamable-HTTP endpoint is up; it only answers POST with the right Accept header)
+# Expected: 503 before you generate a gateway token, 401 after (no bearer sent).
 ```
 
-A `406` (or `400`), not a connection refused or `5xx`, means the server is running. Its Docker healthcheck treats that as healthy.
+Any HTTP response (`503`/`401`/`406`), rather than a connection refused or a hang, means the server is running — a fresh deployment answers `503` until you generate a gateway token in Settings → MCP. Its Docker healthcheck treats a non-2xx response as healthy.
 
 ## AWS ECS Fargate
 
