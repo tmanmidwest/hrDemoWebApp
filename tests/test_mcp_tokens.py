@@ -81,6 +81,15 @@ def test_mcp_page_renders(admin_session: TestClient) -> None:
     assert "Connect a Claude client" in r.text
 
 
+def test_missing_outbound_token_notice(admin_session: TestClient) -> None:
+    """The inbound section warns when the outbound API token isn't set yet, and
+    the warning clears once it is generated."""
+    notice = "No MCP server API token yet."
+    assert notice in admin_session.get("/ui/settings/mcp").text
+    admin_session.post("/ui/settings/mcp/rotate")
+    assert notice not in admin_session.get("/ui/settings/mcp").text
+
+
 # ---------------------------------------------------------------------------
 # Inbound gateway tokens (client → MCP server)
 # ---------------------------------------------------------------------------

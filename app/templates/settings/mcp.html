@@ -22,6 +22,16 @@
   deploy the MCP container before configuring it here.
 </p>
 
+{% if not status.configured %}
+<div style="max-width: 720px; margin-bottom: var(--s-4); background: var(--warning-soft);
+            border: 1px solid var(--warning-line); border-radius: var(--r-md); padding: var(--s-3) var(--s-4);">
+  <span style="color: var(--warning); font-weight: 600;">No MCP server API token yet.</span>
+  <span class="text-muted">The server has no way to reach this app, so any client that connects with a
+  gateway token below will get errors. Generate it first in
+  <a href="#outbound">Outbound — MCP server → this app's API</a> at the bottom of this page.</span>
+</div>
+{% endif %}
+
 {% if new_gateway_token %}
 <div class="secret-reveal" style="max-width: 720px;">
   <div class="secret-reveal__label">New gateway token created — copy it now</div>
@@ -140,7 +150,7 @@
 </div>
 
 {# ===================== OUTBOUND: MCP server → app ===================== #}
-<h2 class="card__title" style="margin: var(--s-2) 0 var(--s-3);">Outbound — MCP server → this app's API</h2>
+<h2 id="outbound" class="card__title" style="margin: var(--s-2) 0 var(--s-3); scroll-margin-top: var(--s-5);">Outbound — MCP server → this app's API</h2>
 <p class="text-muted" style="max-width: 720px; margin-bottom: var(--s-4);">
   The MCP server calls this app's REST API with its own API key (granted only the
   read scopes its tools need). Generate one here; the server reads it live from the
