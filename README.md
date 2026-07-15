@@ -73,7 +73,10 @@ See [`docs/fargate/README.md`](docs/fargate/README.md) for the complete guide in
 | `/ui/settings` | Admin-only settings hub: users, API keys, OAuth clients, identity providers, branding, system, backup & restore, reset data |
 | `/docs` | Swagger UI for the REST API |
 | `/redoc` | Alternative REST API documentation |
+| `/api/v1/reports/...` | Aggregate reports: headcount, org structure, activity (scope `reports:read`) |
 | `/health` | JSON health probe (status + DB check) |
+
+An optional **MCP server** runs as a separate container (`hr-mcp`, default `http://localhost:8100/mcp`) exposing read-only tools for AI assistants to query HR data and run reports. See [docs/MCP.md](docs/MCP.md).
 
 ### Default credentials
 
@@ -93,7 +96,7 @@ The UI uses a refined-minimal admin aesthetic — quiet, professional, easy on t
 - **Lookup management** for all six lookup tables. Deletes are blocked (with a helpful 409 message) if any other row still references the target — set `is_active=false` instead
 - **Role-based access**: the sidebar and available actions adapt to the signed-in user's role (`admin` / `management` / `view_only`)
 - **Users** management with role assignment and enable/disable
-- **API keys** with least-privilege **scope selection** (presets: Employee Management, Read-Only, Full Admin) — plus OAuth clients. Secrets are displayed **once** at creation, then only the prefix is shown
+- **API keys** with least-privilege **scope selection** (presets: Employee Management, Read-Only, Reporting / MCP, Full Admin) — plus OAuth clients. Secrets are displayed **once** at creation, then only the prefix is shown. Create as many as you need — each is named, individually revocable, and tracks its own last-used time
 - **Backup & Restore** — export the instance to a (optionally password-encrypted) zip and restore from one
 - **Reset Data** page with checkboxes per table and a typed-phrase confirmation guard (you must type `RESET` to enable the destructive button)
 
@@ -108,6 +111,7 @@ For the full UI overview, see [docs/UI.md](docs/UI.md).
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional and non-functional requirements |
 | [SCHEMA.md](docs/SCHEMA.md) | Database schema, all tables and fields |
 | [API.md](docs/API.md) | REST API endpoints, auth, and examples |
+| [MCP.md](docs/MCP.md) | MCP server: tools, reports API, setup, and client config |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and deployment topology |
 | [SAVIYNT_INTEGRATION.md](docs/SAVIYNT_INTEGRATION.md) | How to point Saviynt at this app |
 | [SECURITY.md](docs/SECURITY.md) | Auth model, password reset, API key management |

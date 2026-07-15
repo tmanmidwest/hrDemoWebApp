@@ -29,6 +29,8 @@ SCOPES: list[dict[str, str]] = [
      "description": "List and view console accounts."},
     {"value": "users:write", "group": "Console users", "label": "Manage users",
      "description": "Create, update, and enable/disable console accounts."},
+    {"value": "reports:read", "group": "Reports", "label": "Read reports",
+     "description": "Run aggregate reports: headcount, org structure, and activity summaries."},
     {"value": "backup:create", "group": "System", "label": "Create backups",
      "description": "Generate and download a full-instance backup (includes secret keys)."},
     {"value": ADMIN, "group": "System", "label": "Full admin",
@@ -40,7 +42,8 @@ VALID_SCOPES: frozenset[str] = frozenset(s["value"] for s in SCOPES)
 # Named presets that tick a sensible set of scopes.
 PRESETS: dict[str, list[str]] = {
     "Employee Management": ["employees:read", "employees:write", "lookups:read"],
-    "Read-Only (View All)": ["employees:read", "lookups:read", "users:read"],
+    "Read-Only (View All)": ["employees:read", "lookups:read", "users:read", "reports:read"],
+    "Reporting / MCP": ["employees:read", "lookups:read", "reports:read"],
     "Full Admin": [ADMIN],
 }
 

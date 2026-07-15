@@ -6,6 +6,44 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.0.0] — 2026-07-15
+
+First stable release. Consolidates the employee source-of-truth, web UI, REST
+API (scoped API keys + OAuth 2.0), OIDC SSO, audit/activity log, and — new in
+this release — an MCP server and an aggregate reports API.
+
+### Added
+
+**MCP server (streamable HTTP)**
+- A new, optional **MCP server** — a separate, stateless container (`hr-mcp`) that exposes
+  read-only tools for querying HR data and running reports over the Model Context Protocol's
+  streamable-HTTP transport. It is a thin gateway in front of the REST API: each tool forwards
+  the caller's own API token to the app, so the app's existing **scopes and audit logging apply
+  unchanged** and every tool call is attributed to a specific key.
+- Tools: `list_employees`, `get_employee`, `list_lookups`, `headcount_report`, `org_report`,
+  `activity_report`.
+- Fully port-/name-configurable (`HRMCP_*` env vars, plus `HRMCP_HOST_PORT` /
+  `HRMCP_CONTAINER_NAME` in Compose) so a dev and prod stack can coexist on one Docker host.
+- See [docs/MCP.md](docs/MCP.md) for setup and client configuration.
+
+**Reports API**
+- New aggregate reporting endpoints under `/api/v1/reports/*`, gated by a new **`reports:read`**
+  scope:
+  - `GET /reports/headcount` — employee counts grouped by department, location, status, job
+    title, or country (with an `Unassigned` bucket for nullable dimensions).
+  - `GET /reports/org` — managers by span of control, plus org rollups (managers, individual
+    contributors, employees without a supervisor, avg/max span).
+  - `GET /reports/activity` — audit-event counts over a trailing window, bucketed by category,
+    event type, and outcome.
+- New API-key scope `reports:read` and a **Reporting / MCP** preset
+  (`employees:read` + `lookups:read` + `reports:read`). The existing **Read-Only (View All)**
+  preset now also includes `reports:read`. Running a report is itself an audited event.
+
+### Notes
+
+- No database migration is required — the reports read existing tables and `reports:read` is a
+  scope string. Existing API keys keep working unchanged.
+
 ## [0.3.0] — 2026-07-14
 
 ### Added

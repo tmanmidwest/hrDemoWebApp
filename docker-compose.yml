@@ -2,7 +2,9 @@ services:
   hr-sot:
     build: .
     image: demo-hr-sot:local
-    container_name: demo-hr-sot
+    # Container name is overridable so a dev and a prod stack can coexist on the
+    # same Docker host without a name collision (container names are global).
+    container_name: ${HRSOT_CONTAINER_NAME:-demo-hr-sot}
     ports:
       - "${HRSOT_HOST_PORT:-8000}:8000"
     volumes:
@@ -20,6 +22,32 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # Streamable-HTTP MCP server. A separate, stateless container that proxies MCP
+  # tool calls to hr-sot's REST API, forwarding each caller's own API token. It
+  # holds no data and no credentials of its own.
+  hr-mcp:
+    build:
+      context: .
+      dockerfile: mcp_server/Dockerfile
+    image: demo-hr-mcp:local
+    container_name: ${HRMCP_CONTAINER_NAME:-demo-hr-mcp}
+    depends_on:
+      hr-sot:
+        # Wait until the app is healthy so early tool calls don't hit a cold API.
+        condition: service_healthy
+    # Host port and bind port are both overridable. Set distinct HRMCP_HOST_PORT
+    # values to run dev and prod MCP servers on one host.
+    ports:
+      - "${HRMCP_HOST_PORT:-8100}:${HRMCP_BIND_PORT:-8100}"
+    environment:
+      # Reaches the app by its compose service name on the project network, so
+      # this stays correct even if HRSOT_CONTAINER_NAME is overridden.
+      HRMCP_HR_API_BASE_URL: http://hr-sot:8000
+      HRMCP_BIND_PORT: ${HRMCP_BIND_PORT:-8100}
+      HRMCP_PATH: ${HRMCP_PATH:-/mcp}
+      HRMCP_LOG_LEVEL: INFO
+    restart: unless-stopped
 
 volumes:
   hrsot-data:
