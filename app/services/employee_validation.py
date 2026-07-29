@@ -7,6 +7,8 @@ flows run these checks.
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -153,3 +155,71 @@ def validate_supervisor(
             f"current status ('{supervisor.employment_status.label}') is not active."
         )
     return supervisor
+
+
+# ---------------------------------------------------------------------------
+# Personal fields: SSN and date of birth
+# ---------------------------------------------------------------------------
+
+# Oldest plausible living person, used as a sanity floor for DOB.
+_MAX_AGE_YEARS = 120
+
+
+def normalize_ssn(raw: str | None) -> str | None:
+    """Strip an SSN down to its digits.
+
+    Accepts user input like "123-45-6789" or "123 45 6789" and returns the bare
+    9-digit string. Returns None for empty/blank input so the field stays
+    optional. This does NOT validate length — call validate_ssn_format for that.
+    """
+    if raw is None:
+        return None
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    return digits or None
+
+
+def validate_ssn_format(ssn: str) -> None:
+    """Require exactly 9 digits. Assumes the value has been normalized."""
+    if len(ssn) != 9 or not ssn.isdigit():
+        raise _bad_request(
+            "Social Security Number must be exactly 9 digits (numbers only)."
+        )
+
+
+def validate_ssn_unique(
+    db: Session,
+    ssn: str,
+    excluding_employee_id: int | None = None,
+) -> None:
+    """Reject a duplicate SSN.
+
+    Matches against ALL employees — including archived/soft-deleted ones — so a
+    person who was terminated can't be silently re-added under a new record. On
+    an edit, pass excluding_employee_id so the employee doesn't collide with
+    their own existing SSN.
+    """
+    query = db.query(Employee).filter(Employee.ssn == ssn)
+    if excluding_employee_id is not None:
+        query = query.filter(Employee.id != excluding_employee_id)
+    existing = query.first()
+    if existing is not None:
+        label = (
+            f"{existing.first_name} {existing.last_name} "
+            f"({existing.employee_number})"
+        )
+        suffix = " — that record is archived" if existing.is_archived else ""
+        raise _bad_request(
+            f"An employee with this Social Security Number already exists: "
+            f"{label}{suffix}."
+        )
+
+
+def validate_dob(dob: date) -> None:
+    """Date of birth can't be in the future or absurdly far in the past."""
+    today = date.today()
+    if dob > today:
+        raise _bad_request("Date of birth cannot be in the future.")
+    if dob.year < today.year - _MAX_AGE_YEARS:
+        raise _bad_request(
+            f"Date of birth is not valid (more than {_MAX_AGE_YEARS} years ago)."
+        )

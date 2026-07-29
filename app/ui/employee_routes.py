@@ -24,11 +24,15 @@ from app.models import (
     StateProvince,
 )
 from app.services.employee_validation import (
+    normalize_ssn,
     validate_country_id,
     validate_department,
+    validate_dob,
     validate_employment_status,
     validate_job_title_belongs_to_department,
     validate_location,
+    validate_ssn_format,
+    validate_ssn_unique,
     validate_state_belongs_to_country,
     validate_supervisor,
 )
@@ -294,6 +298,11 @@ def show_edit_form(
         "first_name": employee.first_name,
         "middle_name": employee.middle_name,
         "last_name": employee.last_name,
+        "date_of_birth": (
+            employee.date_of_birth.isoformat() if employee.date_of_birth else None
+        ),
+        # SSN is intentionally NOT prefilled — the input stays blank and the
+        # template shows only the masked current value.
         "address_line_1": employee.address_line_1,
         "address_line_2": employee.address_line_2,
         "city": employee.city,
@@ -418,6 +427,8 @@ async def _parse_employee_form(request: Request) -> dict[str, object]:
         "first_name": _parse_str(form.get("first_name")),  # type: ignore[arg-type]
         "middle_name": _parse_str(form.get("middle_name")),  # type: ignore[arg-type]
         "last_name": _parse_str(form.get("last_name")),  # type: ignore[arg-type]
+        "date_of_birth": _parse_date(form.get("date_of_birth")),  # type: ignore[arg-type]
+        "ssn": normalize_ssn(form.get("ssn")),  # type: ignore[arg-type]
         "address_line_1": _parse_str(form.get("address_line_1")),  # type: ignore[arg-type]
         "address_line_2": _parse_str(form.get("address_line_2")),  # type: ignore[arg-type]
         "city": _parse_str(form.get("city")),  # type: ignore[arg-type]
@@ -455,7 +466,7 @@ def _render_form_with_error(
     )
     # Stringify dates back for the form
     display_form = dict(form_data)
-    for k in ("hire_date", "termination_date"):
+    for k in ("hire_date", "termination_date", "date_of_birth"):
         v = display_form.get(k)
         if isinstance(v, date):
             display_form[k] = v.isoformat()
@@ -518,6 +529,11 @@ async def create_employee(
             raise ValueError("Supervisor is required.")
         if data["supervisor_id"] is not None:
             validate_supervisor(db, data["supervisor_id"])  # type: ignore[arg-type]
+        if data["date_of_birth"] is not None:
+            validate_dob(data["date_of_birth"])  # type: ignore[arg-type]
+        if data["ssn"] is not None:
+            validate_ssn_format(data["ssn"])  # type: ignore[arg-type]
+            validate_ssn_unique(db, data["ssn"])  # type: ignore[arg-type]
         for field in ("employee_number", "first_name", "last_name"):
             if not data[field]:
                 raise ValueError(f"{field.replace('_', ' ').title()} is required.")
@@ -534,6 +550,16 @@ async def create_employee(
     except IntegrityError as exc:
         db.rollback()
         msg = str(exc.orig).lower()
+        if "ssn" in msg:
+            return _render_form_with_error(
+                request,
+                user,
+                db,
+                None,
+                data,
+                "An employee with this Social Security Number already exists.",
+                must_have_supervisor,
+            )
         if "employee_number" in msg or "unique" in msg:
             return _render_form_with_error(
                 request,
@@ -615,9 +641,23 @@ async def update_employee(
             validate_supervisor(
                 db, data["supervisor_id"], excluding_employee_id=employee_id  # type: ignore[arg-type]
             )
+        if data["date_of_birth"] is not None:
+            validate_dob(data["date_of_birth"])  # type: ignore[arg-type]
+        # A blank SSN field on edit means "keep the current value" (the form
+        # never renders the real SSN back). Only validate when a new one was
+        # actually entered.
+        if data["ssn"] is not None:
+            validate_ssn_format(data["ssn"])  # type: ignore[arg-type]
+            validate_ssn_unique(
+                db, data["ssn"], excluding_employee_id=employee_id  # type: ignore[arg-type]
+            )
     except (HTTPException, ValueError) as exc:
         msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
         return _render_form_with_error(request, user, db, employee, data, msg, must_have_supervisor)
+
+    # Preserve the existing SSN when the field was left blank on edit.
+    if data["ssn"] is None:
+        data["ssn"] = employee.ssn
 
     for field, value in data.items():
         setattr(employee, field, value)
@@ -626,6 +666,16 @@ async def update_employee(
     except IntegrityError as exc:
         db.rollback()
         msg = str(exc.orig).lower()
+        if "ssn" in msg:
+            return _render_form_with_error(
+                request,
+                user,
+                db,
+                employee,
+                data,
+                "An employee with this Social Security Number already exists.",
+                must_have_supervisor,
+            )
         if "employee_number" in msg or "unique" in msg:
             return _render_form_with_error(
                 request,

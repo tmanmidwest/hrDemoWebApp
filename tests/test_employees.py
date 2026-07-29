@@ -624,3 +624,140 @@ def test_delete_location_referenced_by_employee_returns_409(
     )
     assert resp.status_code == 409
     assert "employees" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# SSN and date of birth (duplicate-employee prevention)
+# ---------------------------------------------------------------------------
+
+
+def test_create_employee_with_ssn_and_dob(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(lookup_ids, first_existing_supervisor_id)
+    payload["ssn"] = "123456789"
+    payload["date_of_birth"] = "1990-05-01"
+    resp = api_client.post("/api/v1/employees/", json=payload)
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    # Response is masked and never exposes the raw SSN.
+    assert body["ssn_masked"] == "•••-••-6789"
+    assert "ssn" not in body
+    assert body["date_of_birth"] == "1990-05-01"
+
+
+def test_create_employee_ssn_strips_separators(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(lookup_ids, first_existing_supervisor_id)
+    payload["ssn"] = "123-45-6789"
+    resp = api_client.post("/api/v1/employees/", json=payload)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["ssn_masked"] == "•••-••-6789"
+
+
+def test_create_employee_ssn_wrong_length_rejected(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(lookup_ids, first_existing_supervisor_id)
+    payload["ssn"] = "12345"
+    resp = api_client.post("/api/v1/employees/", json=payload)
+    assert resp.status_code == 422
+
+
+def test_create_employee_duplicate_ssn_blocked(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    first = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E30001"
+    )
+    first["ssn"] = "555443333"
+    assert api_client.post("/api/v1/employees/", json=first).status_code == 201
+
+    dup = _minimal_payload(
+        lookup_ids,
+        first_existing_supervisor_id,
+        employee_number="E30002",
+        first_name="Other",
+        last_name="Person",
+    )
+    dup["ssn"] = "555-44-3333"  # same digits, different formatting
+    resp = api_client.post("/api/v1/employees/", json=dup)
+    assert resp.status_code == 400
+    assert "Social Security" in resp.json()["detail"]
+
+
+def test_duplicate_ssn_blocked_against_archived_employee(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    first = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E31001"
+    )
+    first["ssn"] = "111223333"
+    created = api_client.post("/api/v1/employees/", json=first)
+    assert created.status_code == 201
+    # Archive the first employee — a duplicate should STILL be blocked.
+    api_client.post(f"/api/v1/employees/{created.json()['id']}/archive")
+
+    dup = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E31002"
+    )
+    dup["ssn"] = "111223333"
+    resp = api_client.post("/api/v1/employees/", json=dup)
+    assert resp.status_code == 400
+    assert "archived" in resp.json()["detail"].lower()
+
+
+def test_update_employee_duplicate_ssn_blocked(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    a = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E32001"
+    )
+    a["ssn"] = "222334444"
+    api_client.post("/api/v1/employees/", json=a)
+
+    b = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E32002"
+    )
+    b["ssn"] = "999887777"
+    emp_b = api_client.post("/api/v1/employees/", json=b).json()
+
+    # Try to change B's SSN to A's — blocked.
+    resp = api_client.patch(
+        f"/api/v1/employees/{emp_b['id']}", json={"ssn": "222334444"}
+    )
+    assert resp.status_code == 400
+    assert "Social Security" in resp.json()["detail"]
+
+
+def test_update_employee_keeps_own_ssn(
+    api_client: TestClient,
+    lookup_ids: dict[str, int],
+    first_existing_supervisor_id: int,
+) -> None:
+    payload = _minimal_payload(
+        lookup_ids, first_existing_supervisor_id, employee_number="E33001"
+    )
+    payload["ssn"] = "444556666"
+    emp = api_client.post("/api/v1/employees/", json=payload).json()
+
+    # Re-sending the employee's own SSN must not trip the uniqueness check.
+    resp = api_client.patch(
+        f"/api/v1/employees/{emp['id']}",
+        json={"ssn": "444556666", "city": "Chicago"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ssn_masked"] == "•••-••-6666"

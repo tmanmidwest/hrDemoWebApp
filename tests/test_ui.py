@@ -100,6 +100,15 @@ def test_new_employee_form_renders(ui_session: TestClient) -> None:
     assert "supervisor_id" in resp.text
 
 
+def test_new_employee_form_has_dob_and_ssn(ui_session: TestClient) -> None:
+    resp = ui_session.get("/ui/employees/new")
+    assert resp.status_code == 200
+    assert "Date of Birth" in resp.text
+    assert "Social Security Number" in resp.text
+    assert 'name="date_of_birth"' in resp.text
+    assert 'name="ssn"' in resp.text
+
+
 def test_edit_employee_form_renders(ui_session: TestClient) -> None:
     # The seeded sample employee with id=1 or 2
     resp = ui_session.get("/ui/employees/1/edit")

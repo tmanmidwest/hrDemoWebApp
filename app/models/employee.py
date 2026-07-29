@@ -37,6 +37,10 @@ class Employee(Base, TimestampMixin):
             name="ck_employee_no_self_supervision",
         ),
         Index("ix_employees_lastname_firstname", "last_name", "first_name"),
+        # SSN is a natural key for de-duplication. Unique index (nullable — many
+        # employees may legitimately have no SSN on file, and SQLite/Postgres
+        # both allow multiple NULLs under a unique index).
+        Index("ix_employees_ssn", "ssn", unique=True),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -48,6 +52,12 @@ class Employee(Base, TimestampMixin):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     middle_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    # Personal
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Stored as 9 digits, no separators. Unique across ALL employees (see
+    # __table_args__) so the same person can't be added twice.
+    ssn: Mapped[str | None] = mapped_column(String(9), nullable=True)
 
     # Address
     address_line_1: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -124,6 +134,16 @@ class Employee(Base, TimestampMixin):
     def full_name(self) -> str:
         """First + last name for display."""
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def ssn_masked(self) -> str | None:
+        """SSN with all but the last four digits masked, e.g. •••-••-1234.
+
+        Used everywhere the SSN is displayed; the full value is never rendered.
+        """
+        if not self.ssn:
+            return None
+        return f"•••-••-{self.ssn[-4:]}"
 
     def __repr__(self) -> str:
         return (

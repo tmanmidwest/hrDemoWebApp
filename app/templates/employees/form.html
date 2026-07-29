@@ -55,6 +55,25 @@
         <input class="input" type="text" id="last_name" name="last_name"
                value="{{ form.last_name or '' }}" required maxlength="100" />
       </div>
+      <div>
+        <label class="label" for="date_of_birth">Date of Birth</label>
+        <input class="input" type="date" id="date_of_birth" name="date_of_birth"
+               value="{{ form.date_of_birth or '' }}" autocomplete="off" />
+      </div>
+      <div>
+        <label class="label" for="ssn">Social Security Number</label>
+        <input class="input mono" type="text" id="ssn" name="ssn"
+               value="{{ form.ssn or '' }}"
+               inputmode="numeric" pattern="\d{9}" maxlength="11"
+               autocomplete="off" placeholder="9 digits, numbers only" />
+        {% if employee and employee.ssn %}
+        <div class="form-hint">
+          Current: <span class="mono">{{ employee.ssn_masked }}</span> · leave blank to keep unchanged
+        </div>
+        {% else %}
+        <div class="form-hint">Numbers only, 9 digits. Prevents adding a duplicate employee.</div>
+        {% endif %}
+      </div>
     </div>
 
     <hr class="divider" />
@@ -189,12 +208,12 @@
       <div>
         <label class="label" for="hire_date">Hire Date<span class="label__required">*</span></label>
         <input class="input" type="date" id="hire_date" name="hire_date"
-               value="{{ form.hire_date or '' }}" required />
+               value="{{ form.hire_date or '' }}" required autocomplete="off" />
       </div>
       <div>
         <label class="label" for="termination_date">Termination Date</label>
         <input class="input" type="date" id="termination_date" name="termination_date"
-               value="{{ form.termination_date or '' }}" />
+               value="{{ form.termination_date or '' }}" autocomplete="off" />
       </div>
       <div>
         <label class="label" for="supervisor_id">
@@ -225,5 +244,29 @@
     </button>
   </div>
 </form>
+
+<script>
+  // Keep the SSN field to digits only, capped at 9.
+  (function () {
+    var ssn = document.getElementById("ssn");
+    if (!ssn) return;
+    ssn.addEventListener("input", function () {
+      this.value = this.value.replace(/\D/g, "").slice(0, 9);
+    });
+  })();
+
+  // Defeat browser autofill on date fields: force each one back to exactly the
+  // value the server rendered. On a fresh "Add" form the server value is empty,
+  // so nothing is pre-populated (no auto-filled "today"). On edit or on a
+  // validation-error re-render the server value is the real date, so it's
+  // preserved. Guards against browsers that helpfully drop today's date into an
+  // empty date input.
+  (function () {
+    ["date_of_birth", "hire_date", "termination_date"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.value = el.getAttribute("value") || "";
+    });
+  })();
+</script>
 
 {% endblock %}

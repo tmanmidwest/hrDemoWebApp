@@ -32,9 +32,12 @@ from app.services.employee_validation import (
     resolve_employment_status_by_value,
     validate_country_id,
     validate_department,
+    validate_dob,
     validate_employment_status,
     validate_job_title_belongs_to_department,
     validate_location,
+    validate_ssn_format,
+    validate_ssn_unique,
     validate_state_belongs_to_country,
     validate_supervisor,
 )
@@ -215,6 +218,12 @@ def create_employee(
     )
     if body.location_id is not None:
         validate_location(db, body.location_id)
+    if body.date_of_birth is not None:
+        validate_dob(body.date_of_birth)
+    # SSN is normalized to 9 digits by the schema; reject a duplicate before commit.
+    if body.ssn is not None:
+        validate_ssn_format(body.ssn)
+        validate_ssn_unique(db, body.ssn)
 
     # supervisor_id is required unless the employees table is empty
     if body.supervisor_id is None:
@@ -237,6 +246,11 @@ def create_employee(
     except IntegrityError as exc:
         db.rollback()
         msg = str(exc.orig).lower()
+        if "ssn" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An employee with this Social Security Number already exists.",
+            ) from None
         if "employee_number" in msg or "unique" in msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -336,6 +350,11 @@ def update_employee(
         validate_location(db, eff_location_id)
     if "supervisor_id" in data and data["supervisor_id"] is not None:
         validate_supervisor(db, data["supervisor_id"], excluding_employee_id=employee_id)
+    if "date_of_birth" in data and data["date_of_birth"] is not None:
+        validate_dob(data["date_of_birth"])
+    if "ssn" in data and data["ssn"] is not None:
+        validate_ssn_format(data["ssn"])
+        validate_ssn_unique(db, data["ssn"], excluding_employee_id=employee_id)
     if eff_term is not None and eff_term < eff_hire:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -350,6 +369,11 @@ def update_employee(
     except IntegrityError as exc:
         db.rollback()
         msg = str(exc.orig).lower()
+        if "ssn" in msg:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An employee with this Social Security Number already exists.",
+            ) from None
         if "employee_number" in msg or "unique" in msg:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,

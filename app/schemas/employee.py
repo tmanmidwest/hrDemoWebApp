@@ -8,7 +8,24 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+def _normalize_ssn_field(v: str | None) -> str | None:
+    """Shared SSN normalizer for write schemas.
+
+    Strips separators to bare digits and requires exactly 9. Blank input becomes
+    None (SSN is optional). Kept in sync with
+    app.services.employee_validation.normalize_ssn / validate_ssn_format.
+    """
+    if v is None:
+        return None
+    digits = "".join(ch for ch in v if ch.isdigit())
+    if not digits:
+        return None
+    if len(digits) != 9:
+        raise ValueError("ssn must be exactly 9 digits (numbers only).")
+    return digits
+
 
 # ---------------------------------------------------------------------------
 # Nested reference shapes used in employee responses
@@ -84,6 +101,11 @@ class EmployeeOut(BaseModel):
     middle_name: str | None
     last_name: str
 
+    # Personal. SSN is exposed masked only (last 4) — the raw value is never
+    # returned by the API.
+    date_of_birth: date | None
+    ssn_masked: str | None
+
     # Address
     address_line_1: str | None
     address_line_2: str | None
@@ -134,6 +156,11 @@ class EmployeeCreate(BaseModel):
 
     # Optional
     middle_name: str | None = Field(default=None, max_length=100)
+    date_of_birth: date | None = None
+    ssn: str | None = Field(
+        default=None,
+        description="Social Security Number, 9 digits. Separators are stripped.",
+    )
     address_line_1: str | None = Field(default=None, max_length=200)
     address_line_2: str | None = Field(default=None, max_length=200)
     city: str | None = Field(default=None, max_length=100)
@@ -147,10 +174,17 @@ class EmployeeCreate(BaseModel):
     supervisor_id: int | None = None  # Required only if other employees exist
     location_id: int | None = None  # Optional — location is not required
 
+    @field_validator("ssn")
+    @classmethod
+    def _validate_ssn(cls, v: str | None) -> str | None:
+        return _normalize_ssn_field(v)
+
     @model_validator(mode="after")
     def _validate_dates(self) -> EmployeeCreate:
         if self.termination_date is not None and self.termination_date < self.hire_date:
             raise ValueError("termination_date must be on or after hire_date")
+        if self.date_of_birth is not None and self.date_of_birth > date.today():
+            raise ValueError("date_of_birth cannot be in the future")
         return self
 
 
@@ -168,6 +202,11 @@ class EmployeeUpdate(BaseModel):
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     middle_name: str | None = Field(default=None, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
+    date_of_birth: date | None = None
+    ssn: str | None = Field(
+        default=None,
+        description="Social Security Number, 9 digits. Separators are stripped.",
+    )
 
     address_line_1: str | None = Field(default=None, max_length=200)
     address_line_2: str | None = Field(default=None, max_length=200)
@@ -196,3 +235,8 @@ class EmployeeUpdate(BaseModel):
     termination_date: date | None = None
     supervisor_id: int | None = None
     location_id: int | None = None
+
+    @field_validator("ssn")
+    @classmethod
+    def _validate_ssn(cls, v: str | None) -> str | None:
+        return _normalize_ssn_field(v)
