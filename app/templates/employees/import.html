@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% set page_title = "Import Employees" %}
+{% block breadcrumb %}<span><a href="/ui/employees">Employees</a></span> <span class="topbar__breadcrumb-sep">/</span> <span>Import</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Import Employees</h1>
+    <p class="page-header__subtitle">Add or update employees in bulk from a CSV file.</p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/employees" class="btn btn--secondary">Back to Employees</a>
+  </div>
+</div>
+
+{% if preview is none %}
+{# ---------------------------------------------------------------- Upload #}
+<div class="card" style="max-width: 760px; margin-bottom: var(--s-6);">
+  <div class="card__header">
+    <h2 class="card__title">1. Get a CSV to fill out</h2>
+  </div>
+  <div class="card__body">
+    <p class="text-muted mb-6">
+      Download a blank template with the expected columns and one example row, or
+      export your current employees to edit and re-import. Matching is by
+      <span class="mono">employee_number</span>: rows with a new number are
+      <strong>added</strong>, existing numbers are <strong>updated</strong>.
+    </p>
+    <div class="flex gap-3">
+      <a href="/ui/employees/import/template.csv" class="btn btn--primary">Download template</a>
+      <a href="/ui/employees/export.csv" class="btn btn--secondary">Export current employees</a>
+    </div>
+    <p class="form-hint" style="margin-top: var(--s-4);">
+      Note: for privacy, exports never include SSNs. On an update, any column you
+      leave blank keeps the employee's existing value.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="max-width: 760px;">
+  <div class="card__header">
+    <h2 class="card__title">2. Upload &amp; preview</h2>
+  </div>
+  <form method="post" action="/ui/employees/import/preview" enctype="multipart/form-data" class="card__body">
+    <p class="text-muted mb-6">
+      Nothing is saved yet — you'll see a preview of what's new, what's updated,
+      and any rows with errors before confirming.
+    </p>
+    <div class="form-row">
+      <label class="label" for="import-file">CSV file<span class="label__required">*</span></label>
+      <input class="input" type="file" id="import-file" name="file" accept=".csv,text/csv" required />
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn--primary">Preview import</button>
+    </div>
+  </form>
+</div>
+
+{% else %}
+{# --------------------------------------------------------------- Preview #}
+
+{% if preview.parse_error %}
+<div class="card" style="max-width: 900px; border-color: var(--danger-line);">
+  <div class="card__body">
+    <p style="color: var(--danger); margin: 0;"><strong>Could not read this file.</strong></p>
+    <p class="text-muted" style="margin-top: var(--s-2);">{{ preview.parse_error }}</p>
+    <div class="form-actions">
+      <a href="/ui/employees/import" class="btn btn--secondary">Choose another file</a>
+    </div>
+  </div>
+</div>
+{% else %}
+
+{# Summary banner #}
+<div class="card" style="margin-bottom: var(--s-5);">
+  <div class="card__body flex gap-4" style="align-items: center; flex-wrap: wrap;">
+    <div>
+      <span class="badge badge--success">{{ preview.new_count }} new</span>
+      <span class="badge badge--warning">{{ preview.update_count }} updated</span>
+      <span class="badge {% if preview.error_count %}badge--danger{% else %}badge--neutral{% endif %}">{{ preview.error_count }} error{{ '' if preview.error_count == 1 else 's' }}</span>
+    </div>
+    <div class="text-faint text-xs">
+      {% if filename %}From <span class="mono">{{ filename }}</span> · {% endif %}{{ preview.rows | length }} data row{{ '' if preview.rows | length == 1 else 's' }}
+    </div>
+  </div>
+</div>
+
+{% if preview.error_count %}
+<p class="text-muted mb-6" style="max-width: 900px;">
+  {{ preview.error_count }} row{{ ' has' if preview.error_count == 1 else 's have' }} errors and will be
+  <strong>skipped</strong>. You can fix them in the file and re-upload, or proceed and import only the valid rows.
+</p>
+{% endif %}
+
+<div class="card">
+  <div class="card__body" style="padding: 0;">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width: 3rem;">Row</th>
+            <th style="width: 7rem;">Action</th>
+            <th>Employee #</th>
+            <th>Name</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview.rows %}
+          <tr class="{% if not row.ok %}is-archived{% endif %}">
+            <td class="mono text-faint">{{ row.line }}</td>
+            <td>
+              {% if not row.ok %}
+                <span class="badge badge--danger">Error</span>
+              {% elif row.intent == 'new' %}
+                <span class="badge badge--success">New</span>
+              {% else %}
+                <span class="badge badge--warning">Update</span>
+              {% endif %}
+            </td>
+            <td class="mono">{{ row.employee_number or "—" }}</td>
+            <td>{{ row.display_name }}</td>
+            <td>
+              {% if not row.ok %}
+                <ul style="margin: 0; padding-left: 1.1rem; color: var(--danger);">
+                  {% for err in row.errors %}<li>{{ err }}</li>{% endfor %}
+                </ul>
+              {% elif row.intent == 'update' %}
+                {% if row.changes %}
+                  <span class="text-muted text-xs">Changes: {{ row.changes | join(", ") }}</span>
+                {% else %}
+                  <span class="text-faint text-xs">No changes</span>
+                {% endif %}
+              {% else %}
+                <span class="text-faint text-xs">New employee</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="flex gap-3" style="margin-top: var(--s-5); align-items: center;">
+  {% set importable = preview.new_count + preview.update_count %}
+  <form method="post" action="/ui/employees/import/commit" style="margin: 0;">
+    {# Carry the parsed file back to the commit step (stateless re-parse). A
+       hidden textarea round-trips multiline CSV reliably. #}
+    <textarea name="csv_text" hidden>{{ csv_text }}</textarea>
+    <button type="submit" class="btn btn--primary" {% if importable == 0 %}disabled{% endif %}>
+      Import {{ importable }} row{{ '' if importable == 1 else 's' }}{% if preview.error_count %} (skip {{ preview.error_count }}){% endif %}
+    </button>
+  </form>
+  <a href="/ui/employees/import" class="btn btn--secondary">Cancel / upload a different file</a>
+</div>
+
+{% endif %}{# parse_error #}
+{% endif %}{# preview is none #}
+
+{% endblock %}

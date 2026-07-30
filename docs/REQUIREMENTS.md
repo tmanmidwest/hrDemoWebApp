@@ -6,7 +6,7 @@ Provide a lightweight, self-contained HR Source of Truth application for non-pro
 
 ## Implementation status
 
-As of this writing, all items below are **implemented and tested**. The test suite (120 tests, all passing) covers models, seed data, authentication, REST API, and the web UI.
+As of this writing, all items below are **implemented and tested**. The test suite (250+ tests) covers models, seed data, authentication, REST API, and the web UI.
 
 | Area | Status |
 |---|---|
@@ -14,6 +14,7 @@ As of this writing, all items below are **implemented and tested**. The test sui
 | Authentication (sessions, API keys, OAuth 2.0) | Implemented |
 | REST API for employees and lookups | Implemented |
 | Web UI (employees, lookups, settings, reset) | Implemented |
+| Bulk employee CSV import/export (UI) | Implemented |
 | Containerization and deployment | Implemented |
 
 ## Functional Requirements
@@ -30,6 +31,12 @@ As of this writing, all items below are **implemented and tested**. The test sui
 - Cross-FK validation: state must belong to country, job title must belong to department, no self-supervision, supervisor must be active and not archived
 - Incremental sync via `updated_since` query parameter for IGA integrations
 - Eligible-supervisor filter (`?eligible_supervisor=true&exclude_id=N`) for dropdown population
+- Bulk CSV import (UI): add and update employees from a spreadsheet, matched by `employee_number`
+  - Downloadable blank template and a current-roster export in the same column shape (SSN never exported)
+  - CSV uses human-readable names (department, job title, country, employment status, location, supervisor by employee number), resolved case-insensitively and validated with the same cross-FK rules
+  - Preview classifies each row as new / update / error before any write; error rows are skipped, not blocking valid rows
+  - On update, a blank cell leaves the existing value unchanged (partial updates)
+  - All imports and exports are recorded in the activity log
 
 ### Lookup Tables
 

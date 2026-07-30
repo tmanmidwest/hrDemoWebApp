@@ -54,6 +54,35 @@ The primary working surface. Shows a table of employees with the following featu
 - **Column visibility picker**: Click the "Columns ▾" button to show/hide Department, Job Title, Work Email, Supervisor, Hire Date, and Country. Selections are saved to your browser's localStorage under the key `hrsot.cols.employees` — they persist per machine, not per user.
 - **Status badges**: Green dot for "Active" or any other `is_active_status=true` status; amber for non-active statuses (Not Active, Leave of Absence, Terminated); neutral gray "Archived" badge for archived rows.
 - **Row actions**: Edit, Archive (or Restore if currently archived). Hidden for `view_only` users, who see the list as read-only.
+- **Header actions** (employee managers only): **Export CSV**, **Import CSV**, and **+ Add Employee**.
+
+### Import / Export CSV (`/ui/employees/import`)
+
+Bulk add or update employees from a spreadsheet. Available to `admin` and `management` roles (the same gate as Add/Edit); hidden for `view_only`.
+
+**Getting a CSV to fill out** — two buttons on the import page:
+
+- **Download template** (`/ui/employees/import/template.csv`) — a blank file with the full column set and one example row.
+- **Export current employees** (`/ui/employees/export.csv`) — the current (non-archived) roster in the *same* column shape, so "export → edit → re-import" round-trips cleanly.
+
+The CSV columns are **human-readable names, not database IDs**: Department, Job Title, Country, State/Province, Employment Status, Location, and Supervisor (referenced by `employee_number`) are all resolved by name, case-insensitively. For privacy, **exports never include SSNs** (the column is present but blank); import still accepts an SSN if you fill it in.
+
+**Preview before anything is saved** — uploading a file (`POST /ui/employees/import/preview`) shows a dry-run table. Nothing is written yet. Each row is classified:
+
+- **New** — the `employee_number` isn't in the system yet.
+- **Update** — the `employee_number` already exists; the row lists which fields will change.
+- **Error** — a required field is missing or a name couldn't be resolved (e.g. an unknown department); the specific reason is shown per row.
+
+A summary banner tallies `N new · N updated · N errors`.
+
+**Committing** (`POST /ui/employees/import/commit`) re-parses and re-validates the file against current data (stateless — nothing is stored between preview and commit), then:
+
+- Matching is by **`employee_number`**: new numbers are added, existing ones updated.
+- On an update, a **blank cell means "leave unchanged"** — only non-empty cells overwrite, so you can send partial updates.
+- **Error rows are skipped**, not blocking the rest — you can fix them and re-upload, or proceed and import only the valid rows. The flash message reports how many were added, updated, and skipped.
+- A supervisor referenced by `employee_number` may live in the database *or* be another new row in the same file (forward references are linked after all rows are inserted).
+
+Every import (each created/updated employee plus a batch summary) and every export is recorded in the **Activity Log** (`/ui/activity`).
 
 ### Add/Edit Employee (`/ui/employees/new` and `/ui/employees/{id}/edit`)
 
@@ -238,6 +267,7 @@ app/
     auth_routes.py                    # /ui/login, /ui/logout
     dependencies.py                   # require_ui_user + redirect-to-login handler
     employee_routes.py                # /ui/employees/*
+    employee_import_routes.py         # /ui/employees/import, export.csv, template.csv
     lookup_routes.py                  # /ui/lookups/*
     settings_routes.py                # /ui/settings/*
     flash.py                          # Flash message session helpers
@@ -249,6 +279,7 @@ app/
     employees/
       list.html
       form.html                       # Used for both new and edit
+      import.html                     # CSV import: upload + preview/commit
       _state_options.html             # HTMX partial
       _job_title_options.html         # HTMX partial
     lookups/
@@ -278,4 +309,6 @@ app/
     app.js                            # Flash auto-dismiss, column picker, modal, reset/restore-confirm
 ```
 
-Role authorization lives in `app/ui/dependencies.py` (`require_admin`, `require_employee_manager`, and a forbidden→redirect handler). UI tests live in `tests/test_ui.py`; role gating and enable/disable in `tests/test_roles.py`; backup/restore in `tests/test_backup.py`; API-key scopes in `tests/test_api_key_scopes.py`.
+The CSV parsing, name→ID resolution, and row classification/commit logic lives in `app/services/employee_import.py`, separate from the thin route layer.
+
+Role authorization lives in `app/ui/dependencies.py` (`require_admin`, `require_employee_manager`, and a forbidden→redirect handler). UI tests live in `tests/test_ui.py`; role gating and enable/disable in `tests/test_roles.py`; backup/restore in `tests/test_backup.py`; API-key scopes in `tests/test_api_key_scopes.py`; CSV import/export in `tests/test_employee_import.py`.

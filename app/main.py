@@ -173,6 +173,7 @@ def create_app() -> FastAPI:
         forbidden_handler,
         redirect_to_login_handler,
     )
+    from app.ui.employee_import_routes import router as ui_employee_import_router
     from app.ui.employee_routes import router as ui_employee_router
     from app.ui.lookup_routes import router as ui_lookup_router
     from app.ui.oidc_routes import router as ui_oidc_router
@@ -180,6 +181,9 @@ def create_app() -> FastAPI:
 
     app.include_router(ui_auth_router)
     app.include_router(ui_oidc_router)
+    # Import/export routes share the /ui/employees prefix; register before the
+    # main employee router so their static paths win over any dynamic segments.
+    app.include_router(ui_employee_import_router)
     app.include_router(ui_employee_router)
     app.include_router(ui_lookup_router)
     app.include_router(ui_settings_router)

@@ -8,6 +8,7 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 
 - Stores employee records with realistic HR fields (employee number, name, contact info, department, job title, supervisor, employment status, hire/termination dates)
 - Provides managed lookup tables for countries, states/provinces, employment statuses, departments, and job titles
+- **Bulk CSV import/export**: add or update employees from a spreadsheet, with a downloadable template, a preview that classifies each row as new/updated/error before anything is saved, and a matching roster export
 - Exposes a full REST API for employee, lookup, and console-user management, plus backup export — suitable for IGA/IAM connector consumption
 - Includes a refined-minimal web UI for managing employees, lookups, console users, and API credentials, with a consolidated **Settings** area for admins
 - **Role-based UI access**: `admin`, `management` (employee CRUD), and `view_only` roles
@@ -69,6 +70,7 @@ See [`docs/fargate/README.md`](docs/fargate/README.md) for the complete guide in
 | `/` | Redirects to the web UI |
 | `/ui/login` | Login page |
 | `/ui/employees` | Employee list (after login) |
+| `/ui/employees/import` | Bulk CSV import — upload, preview, and commit add/update |
 | `/ui/lookups/...` | Manage countries, states, departments, statuses, job titles |
 | `/ui/settings` | Admin-only settings hub: users, API keys, OAuth clients, identity providers, branding, system, backup & restore, reset data |
 | `/docs` | Swagger UI for the REST API |
@@ -93,6 +95,7 @@ The UI uses a refined-minimal admin aesthetic — quiet, professional, easy on t
 
 - **Employee list** with tabs (Active / All / Archived), sortable columns, and per-machine column visibility (saved to your browser)
 - **Add/Edit Employee** form with HTMX-powered dependent dropdowns: pick a country and the state/province list updates; pick a department and the job title list updates
+- **Bulk import/export** from the employee list: download a template (or export the current roster), fill it in, and re-import. A preview checks required fields and shows what's **new** vs. **updated** before you commit; rows with errors are flagged and skipped
 - **Lookup management** for all six lookup tables. Deletes are blocked (with a helpful 409 message) if any other row still references the target — set `is_active=false` instead
 - **Role-based access**: the sidebar and available actions adapt to the signed-in user's role (`admin` / `management` / `view_only`)
 - **Users** management with role assignment and enable/disable

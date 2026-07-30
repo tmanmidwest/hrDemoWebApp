@@ -6,6 +6,31 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.2.0] — 2026-07-29
+
+### Added
+
+**Bulk employee CSV import / export**
+- New **Import CSV** and **Export CSV** actions on the Employees list (employee
+  managers only). Import supports adding *and* updating employees in one file.
+- **Downloadable template** (`/ui/employees/import/template.csv`) with the full
+  human-readable column set and an example row, plus a **current-roster export**
+  (`/ui/employees/export.csv`) in the same shape so "export → edit → re-import"
+  round-trips. Exports never include SSNs.
+- The CSV speaks in **names, not IDs** — Department, Job Title, Country,
+  Employment Status, State/Province, Location, and Supervisor (by
+  `employee_number`) are resolved case-insensitively, reusing the existing
+  cross-FK validation rules.
+- **Preview before commit**: an uploaded file is parsed and every row classified
+  as **New**, **Update**, or **Error** (with per-row reasons and, for updates, a
+  list of the fields that will change). Nothing is written until confirmed.
+- Error rows don't block the batch — you can fix and re-upload, or proceed and
+  import only the valid rows (the errored ones are skipped and reported).
+- On an update, a **blank cell means "leave unchanged"** (partial updates), and
+  supervisors referenced elsewhere in the same file are linked after insert.
+- Every import (per-row create/update + a batch summary) and every export is
+  recorded in the **Activity Log**.
+
 ## [1.1.0] — 2026-07-15
 
 ### Changed
