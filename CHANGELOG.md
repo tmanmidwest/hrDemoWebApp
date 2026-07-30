@@ -31,6 +31,18 @@ backward-compatible — existing data and API keys keep working.
 - Every import (per-row create/update + a batch summary) and every export is
   recorded in the **Activity Log**.
 
+**In-repo API reference (no running instance needed)**
+- `scripts/export_openapi.py` generates the OpenAPI spec straight from the code
+  to **`docs/openapi.json`** and **`docs/openapi.yaml`**, plus **`docs/api.html`**
+  — a `/docs`-style Redoc reference that renders **fully offline** (vendored
+  `docs/redoc.standalone.js`, spec inlined; no CDN). A developer gets the
+  complete, always-accurate API surface without deploying the app.
+- `tests/test_openapi_docs.py` fails if the committed spec drifts from the code,
+  so a forgotten regeneration is caught in CI.
+- [API.md](docs/API.md) now points at the generated reference as the exhaustive
+  list and documents the previously-undocumented credential-management (API
+  keys, OAuth clients) and session-auth endpoints.
+
 ## [1.1.0] — 2026-07-15
 
 ### Changed

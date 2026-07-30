@@ -2,6 +2,15 @@
 
 Interactive API documentation is auto-generated and available at `/docs` (Swagger UI) and `/redoc` (ReDoc) when the app is running.
 
+> **Complete offline reference (no running instance needed).** The full, always-accurate spec — every endpoint, parameter, and request/response schema — is committed to this repo, generated from the code:
+>
+> | File | Use |
+> |---|---|
+> | [`docs/api.html`](api.html) | Open in a browser (double-click) for a `/docs`-style reference — **works fully offline**, renders with the vendored [`redoc.standalone.js`](redoc.standalone.js) and the spec inlined. |
+> | [`docs/openapi.json`](openapi.json) / [`docs/openapi.yaml`](openapi.yaml) | The raw OpenAPI 3.1 spec — import into Postman/Insomnia, or feed to a client generator. |
+>
+> Regenerate after any API change with `python scripts/export_openapi.py` (see [below](#regenerating-this-reference)). The rest of *this* document is a curated, human-friendly guide to auth and common integration scenarios; `api.html` / `openapi.yaml` are the exhaustive list.
+
 This document describes the API surface, authentication, conventions, and gives example requests for common integration scenarios.
 
 ## Base URL
@@ -181,6 +190,33 @@ curl -X POST -H "Authorization: Bearer hrsot_..." \
   -d '{"username": "connector-svc", "password": "a-strong-secret", "role": "management"}' \
   "http://hr.example.com/api/v1/users"
 ```
+
+### Credential management (API keys & OAuth clients)
+
+Manage the credentials that authenticate REST callers. Admin scope required. These back the **Settings → API Keys** and **Settings → OAuth Clients** UI pages; secrets are returned **once** at creation and only a prefix is shown thereafter.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/auth/api-keys` | List API keys (prefix + metadata, never the full secret) |
+| POST | `/api/v1/auth/api-keys` | Create a key with chosen scopes — full key returned once |
+| GET | `/api/v1/auth/api-keys/{id}` | Get one key's metadata |
+| DELETE | `/api/v1/auth/api-keys/{id}` | Delete a key |
+| POST | `/api/v1/auth/api-keys/{id}/revoke` | Revoke a key (kept for audit, can no longer authenticate) |
+| GET | `/api/v1/auth/oauth-clients` | List OAuth clients |
+| POST | `/api/v1/auth/oauth-clients` | Create a client — `client_secret` returned once |
+| GET | `/api/v1/auth/oauth-clients/{id}` | Get one client |
+| DELETE | `/api/v1/auth/oauth-clients/{id}` | Delete a client |
+| POST | `/api/v1/auth/oauth-clients/{id}/revoke` | Revoke a client |
+
+### Session auth (web UI)
+
+Cookie-based session login used by the browser UI (and available for scripted callers that prefer sessions over bearer tokens). See the [`docs/api.html`](api.html) reference for exact request/response shapes.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/auth/session/login` | Log in with username + password; sets the session cookie |
+| POST | `/api/v1/auth/session/logout` | Clear the session |
+| GET | `/api/v1/auth/session/me` | Current signed-in user |
 
 ### Backup
 
@@ -377,3 +413,20 @@ For write operations (POST/PUT/PATCH), send only the FK ID (e.g., `"country_id":
 | 409 | Conflict (duplicate `employee_number`, attempt to delete a system lookup row) |
 | 422 | Pydantic validation failure (detailed field-level errors) |
 | 500 | Server error |
+
+## Regenerating this reference
+
+The committed spec files (`docs/openapi.json`, `docs/openapi.yaml`) and the rendered `docs/api.html` are generated from the code — they are not hand-maintained. Regenerate them whenever the API surface changes:
+
+```bash
+python scripts/export_openapi.py
+```
+
+This rewrites all three files from the current routes. `api.html` renders with the vendored `docs/redoc.standalone.js` (a one-time ~0.9 MB asset), so it stays fully offline. A test (`tests/test_openapi_docs.py`) fails if the committed `openapi.json` drifts from the code, so CI catches a forgotten regeneration.
+
+To refresh the vendored Redoc bundle itself (rarely needed):
+
+```bash
+curl -sSL -o docs/redoc.standalone.js \
+  https://cdn.jsdelivr.net/npm/redoc@2.5.0/bundles/redoc.standalone.js
+```

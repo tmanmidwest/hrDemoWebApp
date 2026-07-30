@@ -114,6 +114,7 @@ For the full UI overview, see [docs/UI.md](docs/UI.md).
 | [REQUIREMENTS.md](docs/REQUIREMENTS.md) | Functional and non-functional requirements |
 | [SCHEMA.md](docs/SCHEMA.md) | Database schema, all tables and fields |
 | [API.md](docs/API.md) | REST API endpoints, auth, and examples |
+| [api.html](docs/api.html) | **Complete offline API reference** — open in a browser for a `/docs`-style page, no running instance needed (raw spec in [openapi.yaml](docs/openapi.yaml) / [openapi.json](docs/openapi.json)) |
 | [MCP.md](docs/MCP.md) | MCP server: tools, reports API, setup, and client config |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture and deployment topology |
 | [SAVIYNT_INTEGRATION.md](docs/SAVIYNT_INTEGRATION.md) | How to point Saviynt at this app |
