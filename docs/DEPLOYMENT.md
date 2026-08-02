@@ -19,13 +19,21 @@ If `/data` is ephemeral, every container restart wipes employees, credentials, a
 | Variable | Default | Purpose |
 |---|---|---|
 | `HRSOT_DATA_DIR` | `/data` | Persistent storage location |
-| `HRSOT_SESSION_SECRET` | Auto-generated | Override for cookie signing key |
-| `HRSOT_INITIAL_ADMIN_PASSWORD` | `N0nPr0dF0r$@viynt8` | Override seeded admin password |
-| `HRSOT_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `HRSOT_BIND_HOST` | `0.0.0.0` | Host to bind |
 | `HRSOT_BIND_PORT` | `8000` | Port to bind |
+| `HRSOT_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `HRSOT_SESSION_SECRET` | Auto-generated | Cookie-signing secret. Pin it so sessions survive redeploys |
+| `HRSOT_SESSION_MAX_AGE_SECONDS` | `28800` | Session cookie lifetime (default 8 h) |
+| `HRSOT_INITIAL_ADMIN_USERNAME` | `robbytheadmin` | Username of the seeded admin account |
+| `HRSOT_INITIAL_ADMIN_PASSWORD` | `N0nPr0dF0r$@viynt8` | Password of the seeded admin account |
+| `HRSOT_OAUTH_DEFAULT_TOKEN_LIFETIME_SECONDS` | `3600` | Default OAuth access-token lifetime |
+| `HRSOT_JWT_ALGORITHM` | `HS256` | JWT signing algorithm |
+| `HRSOT_PUBLIC_BASE_URL` | (unset) | Externally-reachable base URL (e.g. `https://hr.example.com`), used to build OIDC redirect URIs behind an HTTPS proxy |
+| `HRSOT_AUDIT_RETENTION_DAYS` | `30` | Prune audit/activity events older than this; `0` keeps them forever |
+| `HRSOT_APP_NAME` | `Demo HR Source of Truth App` | Display name (cosmetic; baked into the image) |
+| `HRSOT_APP_VERSION` | `1.2.0` | Version string shown in the UI/OpenAPI (cosmetic; leave at the image default) |
 
-None are required for a working deployment.
+None are required for a working deployment. With the bundled `docker-compose.yml`, every variable except `HRSOT_DATA_DIR`, `HRSOT_BIND_HOST`/`HRSOT_BIND_PORT`, and `HRSOT_APP_NAME`/`HRSOT_APP_VERSION` (fixed by the compose topology and image) can be set from a Portainer stack env or an `.env` file — see [Portainer → Advanced](#advanced--set-every-variable-via-an-environment-file).
 
 ### MCP server (`hr-mcp`, optional)
 
@@ -55,13 +63,19 @@ The server itself reads these `HRMCP_`-prefixed variables:
 | `HRMCP_DATA_DIR` | `/data` | Shared volume where the app writes the token files this server reads |
 | `HRMCP_PATH` | `/mcp` | URL path of the streamable-HTTP endpoint |
 | `HRMCP_REQUEST_TIMEOUT_SECONDS` | `30` | Per-request timeout to the app |
+| `HRMCP_SERVER_NAME` | `hrsot-mcp` | MCP server name advertised to clients |
 | `HRMCP_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `HRMCP_BIND_HOST` | `0.0.0.0` | Host to bind inside the container |
 | `HRMCP_BIND_PORT` | `8100` | Port the server process listens on. In Compose the published mapping is fixed to `:8100`, so leave this alone there and use `HRMCP_HOST_PORT`; it's only useful when running the server **without** Docker (`python -m mcp_server`). |
 
 For a **remote** MCP host that can't share the data volume, supply the two
-credentials as env overrides instead of via the UI files: `HRMCP_API_KEY` (the
-outbound `hrsot_` key) and `HRMCP_AUTH_TOKEN` (a single static inbound bearer).
+credentials as env overrides instead of via the UI files (both default to unset):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `HRMCP_API_KEY` | (unset) | Static **outbound** `hrsot_` API key, used instead of the `mcp_api_key` file |
+| `HRMCP_API_KEY_FILE` | (unset) | Path to a file holding the outbound API key (alternative to `HRMCP_API_KEY`) |
+| `HRMCP_AUTH_TOKEN` | (unset) | Single static **inbound** bearer token, accepted alongside the UI-managed gateway tokens |
 
 None are required.
 
@@ -98,7 +112,12 @@ services:
     volumes:
       - hrsot-data:/data
     environment:
-      HRSOT_LOG_LEVEL: INFO
+      # Each app setting is passed through with its own default, so an .env /
+      # stack env can override any of them. Abbreviated here — see the file for
+      # the full list and the env reference below.
+      HRSOT_LOG_LEVEL: ${HRSOT_LOG_LEVEL:-INFO}
+      HRSOT_INITIAL_ADMIN_PASSWORD: ${HRSOT_INITIAL_ADMIN_PASSWORD:-N0nPr0dF0r$$@viynt8}
+      # … HRSOT_SESSION_SECRET, HRSOT_AUDIT_RETENTION_DAYS, HRSOT_PUBLIC_BASE_URL, etc.
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -121,10 +140,12 @@ services:
     volumes:
       - hrsot-data:/data:ro   # read-only: reads its token files, never writes
     environment:
-      HRMCP_HR_API_BASE_URL: http://hr-sot:8000   # reaches the app by service name
+      HRMCP_HR_API_BASE_URL: ${HRMCP_HR_API_BASE_URL:-http://hr-sot:8000}
       HRMCP_DATA_DIR: /data
       HRMCP_PATH: ${HRMCP_PATH:-/mcp}
-      HRMCP_LOG_LEVEL: INFO
+      HRMCP_LOG_LEVEL: ${HRMCP_LOG_LEVEL:-INFO}
+      # … plus HRMCP_REQUEST_TIMEOUT_SECONDS, HRMCP_SERVER_NAME, and the remote
+      # credential overrides HRMCP_API_KEY / HRMCP_AUTH_TOKEN — all overridable.
     restart: unless-stopped
 
 volumes:
@@ -192,7 +213,51 @@ The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags 
 | `HRSOT_SESSION_SECRET` | Pin the cookie-signing key so sessions survive redeploys |
 | `HRSOT_LOG_LEVEL` | Set to `DEBUG` while troubleshooting |
 
-See the [Environment variables](#environment-variables) table above for the full list. None are required.
+In the stack editor, add these one per row under **Environment variables** (a `name` and a `value` field each). See the [Environment variables](#environment-variables) table above for the full list, or paste them all at once with [Advanced mode](#advanced--set-every-variable-via-an-environment-file) below. None are required.
+
+#### Advanced — set every variable via an environment file
+
+Instead of adding variables one row at a time, click **Advanced mode** in the stack's **Environment variables** section: it turns the two-field editor into a single text box that accepts a `.env`-style file (`NAME=value`, one per line). This is the quickest way to configure a fully non-default instance in one paste.
+
+The block below lists **every** variable the bundled `docker-compose.yml` reads, with its default. Uncomment (remove the leading `#`) and edit only the lines you want to change — anything left commented falls back to the built-in default, so you never have to fill in all of them:
+
+```dotenv
+# ── Compose substitution (ports / names / MCP endpoint path) ──────────────
+# HRSOT_HOST_PORT=8000               # host port the app is published on
+# HRSOT_CONTAINER_NAME=demo-hr-sot   # app container name
+# HRMCP_HOST_PORT=8100               # host port the MCP server is published on
+# HRMCP_CONTAINER_NAME=demo-hr-mcp   # MCP container name
+
+# ── App (hr-sot) ─────────────────────────────────────────────────────────
+# HRSOT_LOG_LEVEL=INFO                              # DEBUG | INFO | WARNING | ERROR
+# HRSOT_SESSION_SECRET=                             # pin to keep sessions across redeploys
+# HRSOT_SESSION_MAX_AGE_SECONDS=28800              # session cookie lifetime (8h)
+# HRSOT_INITIAL_ADMIN_USERNAME=robbytheadmin       # seeded admin username
+# HRSOT_INITIAL_ADMIN_PASSWORD=N0nPr0dF0r$@viynt8  # seeded admin password (change me!)
+# HRSOT_OAUTH_DEFAULT_TOKEN_LIFETIME_SECONDS=3600  # OAuth access-token lifetime
+# HRSOT_JWT_ALGORITHM=HS256                        # JWT signing algorithm
+# HRSOT_PUBLIC_BASE_URL=                           # e.g. https://hr.example.com (OIDC behind a proxy)
+# HRSOT_AUDIT_RETENTION_DAYS=30                    # 0 = keep audit events forever
+#   Fixed by the compose file — do NOT set here:
+#   HRSOT_DATA_DIR (/data), HRSOT_BIND_HOST (0.0.0.0), HRSOT_BIND_PORT (8000),
+#   HRSOT_APP_NAME / HRSOT_APP_VERSION (baked into the image)
+
+# ── MCP server (hr-mcp) ──────────────────────────────────────────────────
+# HRMCP_PATH=/mcp                             # streamable-HTTP endpoint path
+# HRMCP_HR_API_BASE_URL=http://hr-sot:8000    # upstream app URL (leave default on this stack)
+# HRMCP_REQUEST_TIMEOUT_SECONDS=30            # per-request timeout to the app
+# HRMCP_SERVER_NAME=hrsot-mcp                 # server name advertised to clients
+# HRMCP_LOG_LEVEL=INFO                        # DEBUG | INFO | WARNING | ERROR
+#   Only for a remote MCP host that can't share the /data volume:
+# HRMCP_API_KEY=                              # static outbound hrsot_ key
+# HRMCP_AUTH_TOKEN=                           # static inbound bearer token
+#   Fixed by the compose file — do NOT set here:
+#   HRMCP_DATA_DIR (/data), HRMCP_BIND_HOST (0.0.0.0), HRMCP_BIND_PORT (8100)
+```
+
+> **How this works.** Portainer stack variables are used for `${...}` substitution in the compose file — they don't reach a container unless the service references them. The bundled `docker-compose.yml` passes each variable above through with its own default (`${VAR:-default}`), which is what makes this file take effect. A stray variable the compose file doesn't reference is silently ignored, so a typo'd name fails quietly — double-check spelling if a setting doesn't take.
+
+Redeploy the stack after editing (**Update the stack**). Note that `HRSOT_INITIAL_ADMIN_*` only applies on the **first** startup against an empty `/data` volume — it seeds the admin account and is ignored afterward; change an existing admin's password in the UI instead.
 
 ### Notes specific to Portainer
 

@@ -14,7 +14,26 @@ services:
       # root-owned on the host and break with PermissionError.
       - hrsot-data:/data
     environment:
-      HRSOT_LOG_LEVEL: INFO
+      # App config, overridable from a Portainer stack env / an .env file. Each
+      # is passed through with the app's OWN default, so leaving a variable unset
+      # keeps that default rather than clobbering it with an empty string. See
+      # docs/DEPLOYMENT.md for the full reference and a ready-to-paste env file.
+      #
+      # Deliberately NOT passed through (fixed by this compose file's topology):
+      #   HRSOT_DATA_DIR   — the volume is mounted at /data
+      #   HRSOT_BIND_HOST  — the container binds 0.0.0.0
+      #   HRSOT_BIND_PORT  — 8000 internally (port mapping + healthcheck assume it)
+      #   HRSOT_APP_NAME / HRSOT_APP_VERSION — baked into the image
+      HRSOT_LOG_LEVEL: ${HRSOT_LOG_LEVEL:-INFO}
+      HRSOT_SESSION_SECRET: ${HRSOT_SESSION_SECRET:-}
+      HRSOT_SESSION_MAX_AGE_SECONDS: ${HRSOT_SESSION_MAX_AGE_SECONDS:-28800}
+      HRSOT_INITIAL_ADMIN_USERNAME: ${HRSOT_INITIAL_ADMIN_USERNAME:-robbytheadmin}
+      # $$ escapes a literal $ so compose does not treat $@ as interpolation.
+      HRSOT_INITIAL_ADMIN_PASSWORD: ${HRSOT_INITIAL_ADMIN_PASSWORD:-N0nPr0dF0r$$@viynt8}
+      HRSOT_OAUTH_DEFAULT_TOKEN_LIFETIME_SECONDS: ${HRSOT_OAUTH_DEFAULT_TOKEN_LIFETIME_SECONDS:-3600}
+      HRSOT_JWT_ALGORITHM: ${HRSOT_JWT_ALGORITHM:-HS256}
+      HRSOT_PUBLIC_BASE_URL: ${HRSOT_PUBLIC_BASE_URL:-}
+      HRSOT_AUDIT_RETENTION_DAYS: ${HRSOT_AUDIT_RETENTION_DAYS:-30}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -49,11 +68,21 @@ services:
       - hrsot-data:/data:ro
     environment:
       # Reaches the app by its compose service name on the project network, so
-      # this stays correct even if HRSOT_CONTAINER_NAME is overridden.
-      HRMCP_HR_API_BASE_URL: http://hr-sot:8000
+      # the default stays correct even if HRSOT_CONTAINER_NAME is overridden.
+      # All overridable from a stack env / .env file, each with its own default.
+      # HRMCP_DATA_DIR is fixed (/data — where the volume is mounted); HRMCP_BIND_HOST
+      # and HRMCP_BIND_PORT are fixed too (the container always listens on 8100).
+      HRMCP_HR_API_BASE_URL: ${HRMCP_HR_API_BASE_URL:-http://hr-sot:8000}
       HRMCP_DATA_DIR: /data
       HRMCP_PATH: ${HRMCP_PATH:-/mcp}
-      HRMCP_LOG_LEVEL: INFO
+      HRMCP_REQUEST_TIMEOUT_SECONDS: ${HRMCP_REQUEST_TIMEOUT_SECONDS:-30}
+      HRMCP_LOG_LEVEL: ${HRMCP_LOG_LEVEL:-INFO}
+      HRMCP_SERVER_NAME: ${HRMCP_SERVER_NAME:-hrsot-mcp}
+      # Remote-host credential overrides — leave empty to use the UI-managed
+      # token files on the shared /data volume (the normal Compose setup).
+      HRMCP_API_KEY: ${HRMCP_API_KEY:-}
+      HRMCP_API_KEY_FILE: ${HRMCP_API_KEY_FILE:-}
+      HRMCP_AUTH_TOKEN: ${HRMCP_AUTH_TOKEN:-}
     restart: unless-stopped
 
 volumes:
