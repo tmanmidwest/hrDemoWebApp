@@ -31,4 +31,48 @@
     <button type="submit" class="btn btn--primary">Save settings</button>
   </div>
 </form>
+
+<div class="card" style="max-width: 520px; margin-top: var(--s-6);">
+  <div class="card__body">
+    <h2 class="card__title">Static reference managers</h2>
+    <p class="form-hint" style="margin-bottom: var(--s-4);">
+      A <strong>static reference manager</strong> is a stand-in supervisor record
+      (for example <span class="mono">{{ reference_manager_number }}</span>) you can
+      tag as a manager on employees you add. It stays visible here in the app
+      (badged <span class="badge badge--warning text-xs">Static</span>), but is
+      <strong>hidden from the API/MCP employee list, CSV export, and reports</strong>,
+      so downstream systems never try to provision or update it. It still resolves
+      as the manager on anyone who reports to it.
+    </p>
+
+    <form method="post" action="/ui/settings/system/reference-managers" style="margin: 0;">
+      <label class="switch-row" style="display:flex; align-items:center; gap: var(--s-3);">
+        <input type="checkbox" name="enabled" value="1"
+               {% if reference_managers_enabled %}checked{% endif %}
+               onchange="this.form.submit()" />
+        <span>Enable static reference managers on this instance</span>
+      </label>
+    </form>
+
+    {% if reference_managers_enabled %}
+    <div style="margin-top: var(--s-5); padding-top: var(--s-5); border-top: 1px solid var(--border);">
+      {% if reference_manager_seeded %}
+        <p class="form-hint">
+          The <span class="mono">{{ reference_manager_number }}</span> record exists
+          and is ready to assign as a supervisor.
+          <a href="/ui/employees?view=all">View in Employees →</a>
+        </p>
+      {% else %}
+        <form method="post" action="/ui/settings/system/reference-managers/seed" style="margin: 0;">
+          <p class="form-hint" style="margin-bottom: var(--s-3);">
+            Create the seeded <span class="mono">{{ reference_manager_number }}</span>
+            record (Margaret Manager, El Segundo, CA).
+          </p>
+          <button type="submit" class="btn btn--primary">Create static manager (Margaret)</button>
+        </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

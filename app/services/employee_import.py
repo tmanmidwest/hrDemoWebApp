@@ -230,9 +230,14 @@ def export_employees_csv(db: Session) -> str:
     SSN is intentionally left blank — we never emit full SSNs into a
     downloadable file. Import still accepts the column if the user fills it in.
     """
+    # Reference managers are excluded from the export just like the API roster —
+    # they're static stand-ins, not employees to round-trip through import.
     employees = (
         db.query(Employee)
-        .filter(Employee.is_archived.is_(False))
+        .filter(
+            Employee.is_archived.is_(False),
+            Employee.is_reference_manager.is_(False),
+        )
         .order_by(Employee.employee_number)
         .all()
     )

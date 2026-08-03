@@ -149,11 +149,17 @@ async def list_employees(
     updated_since: str | None = None,
     sort: str = "last_name",
     order: str = "asc",
+    include_reference_managers: bool = False,
 ) -> Any:
     """List employees, with optional filtering, sorting, and pagination.
 
     `updated_since` is an ISO-8601 datetime for incremental views. Archived
     (soft-deleted) employees are excluded unless `include_archived` is true.
+
+    Static reference managers (stand-in supervisor records such as
+    `margaretmanager`) are excluded unless `include_reference_managers` is true.
+    They still appear as the `supervisor` on employees who report to them and
+    are fetchable by id via `get_employee`.
     """
     return await _get(
         "/api/v1/employees/",
@@ -166,6 +172,7 @@ async def list_employees(
             "updated_since": updated_since,
             "sort": sort,
             "order": order,
+            "include_reference_managers": include_reference_managers,
         },
     )
 

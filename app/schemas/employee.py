@@ -81,6 +81,9 @@ class EmployeeSupervisorRef(BaseModel):
     employee_number: str
     first_name: str
     last_name: str
+    # True when this supervisor is a static reference manager (e.g.
+    # "margaretmanager") rather than a real, syncable employee.
+    is_reference_manager: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +131,11 @@ class EmployeeOut(BaseModel):
     hire_date: date
     termination_date: date | None
     supervisor: EmployeeSupervisorRef | None
+
+    # Static reference manager: a stand-in supervisor record that is hidden from
+    # the roster list, CSV export, and reports, but still assignable and
+    # fetchable. See app.services.reference_managers.
+    is_reference_manager: bool
 
     # Lifecycle
     is_archived: bool

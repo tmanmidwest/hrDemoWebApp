@@ -11,7 +11,7 @@ can still set a starting default; the UI value then persists and overrides it.
 
 from __future__ import annotations
 
-from sqlalchemy import Integer
+from sqlalchemy import Boolean, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -30,6 +30,13 @@ class AppConfig(Base, TimestampMixin):
     # Delete audit/activity events older than this many days. 0 = keep forever.
     audit_retention_days: Mapped[int] = mapped_column(
         Integer, nullable=False, default=30
+    )
+    # Feature toggle: when True, the UI exposes affordances for creating and
+    # marking static reference managers (see app.services.reference_managers).
+    # The per-row Employee.is_reference_manager flag is what actually hides a
+    # record from external reads; this toggle only gates the UI.
+    reference_managers_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
 
     def __repr__(self) -> str:

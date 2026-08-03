@@ -9,6 +9,7 @@ This is **not** a production HR system. It is intentionally simple, self-contain
 - Stores employee records with realistic HR fields (employee number, name, contact info, department, job title, supervisor, employment status, hire/termination dates)
 - Provides managed lookup tables for countries, states/provinces, employment statuses, departments, and job titles
 - **Bulk CSV import/export**: add or update employees from a spreadsheet, with a downloadable template, a preview that classifies each row as new/updated/error before anything is saved, and a matching roster export
+- **Static reference managers** (opt-in): a fixed stand-in supervisor (e.g. `margaretmanager`) you can tag as the manager on new employees. It's assignable and stays visible (badged "Static") in the web UI, but is hidden from the API/MCP employee list, CSV export, and reports so downstream systems never treat it as a syncable employee. Enable it and seed the record from **Settings → System**.
 - Exposes a full REST API for employee, lookup, and console-user management, plus backup export — suitable for IGA/IAM connector consumption
 - Includes a refined-minimal web UI for managing employees, lookups, console users, and API credentials, with a consolidated **Settings** area for admins
 - **Role-based UI access**: `admin`, `management` (employee CRUD), and `view_only` roles

@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Employee, EmploymentStatus
 from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
+from app.services import reference_managers
 from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, require_scope
 from app.services.employee_validation import (
@@ -111,6 +112,15 @@ def list_employees(
         default=None,
         description="When using eligible_supervisor on an edit form, exclude this employee.",
     ),
+    include_reference_managers: bool = Query(
+        default=False,
+        description=(
+            "Include static reference managers (stand-in supervisor records) in "
+            "the results. They are excluded by default so downstream systems "
+            "never treat them as real, syncable employees. They always remain "
+            "assignable via eligible_supervisor and fetchable by id."
+        ),
+    ),
     # Sort
     sort: str = Query(
         default="last_name",
@@ -157,6 +167,14 @@ def list_employees(
         )
         if exclude_id is not None:
             query = query.filter(Employee.id != exclude_id)
+
+    # Static reference managers are hidden from the roster by default so external
+    # systems never treat them as real employees to sync. They stay visible when
+    # explicitly requested, and always in eligible_supervisor (picker) mode so
+    # they remain assignable as a manager.
+    query = reference_managers.exclude_reference_managers(
+        query, include=include_reference_managers or eligible_supervisor
+    )
 
     # Apply sort
     sort_col = SORTABLE_FIELDS[sort]

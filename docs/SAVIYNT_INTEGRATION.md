@@ -95,6 +95,8 @@ GET /api/v1/employees?updated_since=<last_sync_iso8601>
 GET /api/v1/employees?include_archived=true
 ```
 
+**Static reference managers** are excluded from all of the calls above by design. A reference manager (e.g. `margaretmanager`) is a fixed stand-in supervisor you can tag on real employees without importing it as a user — so Saviynt never tries to provision or reconcile it. The connector still receives it as the `supervisor` object (with `employee_number`, `first_name`, `last_name`) on anyone who reports to it, so the `manager` attribute resolves correctly. If you ever need to pull the record itself, add `?include_reference_managers=true`. Enable and seed reference managers from **Settings → System** in the HR app. See [What's static and what syncs](#reference-managers) below.
+
 ### 4. Field mapping
 
 Suggested mapping from HR fields to Saviynt user attributes. Adjust to match your Saviynt schema.
@@ -115,7 +117,8 @@ Suggested mapping from HR fields to Saviynt user attributes. Adjust to match you
 | `country.code` | `country` |
 | `state_province.name` | `state` |
 | `city` | `city` |
-| `supervisor.first_name` + `supervisor.last_name` | `manager` (or map to a separate manager lookup) |
+| `supervisor.employee_number` | `manager` (stable, space-free handle — e.g. `margaretmanager`) |
+| `supervisor.first_name` + `supervisor.last_name` | `manager` display name (alternative to the handle above) |
 | `hire_date` | `startdate` |
 | `termination_date` | `enddate` |
 | `employment_status.value` | `statuskey` (1 = active, 0 = inactive) |
@@ -133,6 +136,26 @@ Suggested Saviynt rules:
 | `employment_status.is_active_status == true` AND `is_archived == false` | Provision / keep active |
 | `employment_status.is_active_status == false` AND `is_archived == false` | Suspend |
 | `is_archived == true` | Deprovision |
+
+<a id="reference-managers"></a>
+## Static reference managers — what's static and what syncs
+
+Some POC instances keep a few fixed users around for other use cases and want to tag them as the manager of newly-added employees without those fixed users being imported as syncable identities. That's what a **static reference manager** is for.
+
+Enable the feature and create the seeded `margaretmanager` record from **Settings → System**. Any employee can also be marked "Static" from the employee edit form once the feature is on.
+
+How a reference manager behaves:
+
+| Surface | Reference manager (e.g. `margaretmanager`) |
+|---|---|
+| `GET /api/v1/employees` list (full & incremental sync) | **Hidden** — Saviynt never sees it as a user to provision/reconcile |
+| CSV export, headcount & org reports | **Excluded** |
+| `supervisor` object on employees who report to it | **Present** — `employee_number` (space-free handle), `first_name`, `last_name`, `is_reference_manager: true` |
+| `GET /api/v1/employees/{id}` by id | **Returned** (fetchable directly) |
+| `?include_reference_managers=true` on the list | **Returned** (explicit opt-in) |
+| HR web UI employee list | **Shown**, badged "Static" |
+
+Practical effect: map the `manager` attribute from `supervisor.employee_number`. Employees you tag with Margaret carry `manager = margaretmanager` through the sync, while Margaret herself is never created or updated on the Saviynt side.
 
 ## Testing scenarios
 

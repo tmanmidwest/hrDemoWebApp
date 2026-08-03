@@ -235,6 +235,22 @@
       </div>
     </div>
 
+    {% if reference_managers_enabled %}
+    <div class="form-row">
+      <label class="label" style="display:flex; align-items:center; gap: var(--s-3);">
+        <input type="checkbox" name="is_reference_manager" value="1"
+               {% if form.is_reference_manager %}checked{% endif %} />
+        <span>Static reference manager</span>
+      </label>
+      <div class="form-hint">
+        Marks this record as a stand-in manager: it stays assignable as a
+        supervisor and visible here (badged <span class="badge badge--warning text-xs">Static</span>),
+        but is hidden from the API/MCP employee list, CSV export, and reports so
+        downstream systems never treat it as a syncable employee.
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 
   <div class="form-actions" style="padding: var(--s-5) var(--s-6);">

@@ -112,8 +112,11 @@ def headcount_report(
     # with no (matching) employees simply don't appear — that's the intended
     # headcount semantics. Employees with a NULL nullable FK are counted below
     # as a separate "Unassigned" bucket.
-    query = db.query(model.id, label_col, func.count(Employee.id)).join(
-        Employee, fk == model.id
+    query = (
+        db.query(model.id, label_col, func.count(Employee.id))
+        .join(Employee, fk == model.id)
+        # Static reference managers aren't real headcount.
+        .filter(Employee.is_reference_manager.is_(False))
     )
     if not include_archived:
         query = query.filter(Employee.is_archived.is_(False))
@@ -126,7 +129,9 @@ def headcount_report(
     # For a nullable FK, employees with no value don't appear via the join;
     # count them separately as an "Unassigned" bucket.
     if nullable:
-        unassigned_q = db.query(func.count(Employee.id)).filter(fk.is_(None))
+        unassigned_q = db.query(func.count(Employee.id)).filter(
+            fk.is_(None), Employee.is_reference_manager.is_(False)
+        )
         if not include_archived:
             unassigned_q = unassigned_q.filter(Employee.is_archived.is_(False))
         unassigned = unassigned_q.scalar() or 0
@@ -178,32 +183,55 @@ def org_report(
 
     Only non-archived employees are counted, on both the manager and report side.
     """
+    # Static reference managers are excluded from the employee population on
+    # both sides: they aren't counted as employees, and they don't appear as
+    # manager nodes in the ranking. Their real direct reports still count as
+    # employees — they just aren't attributed to a static manager node.
+    ref_mgr_ids = {
+        row[0]
+        for row in db.query(Employee.id)
+        .filter(Employee.is_reference_manager.is_(True))
+        .all()
+    }
+
     total_employees = (
         db.query(func.count(Employee.id))
-        .filter(Employee.is_archived.is_(False))
+        .filter(
+            Employee.is_archived.is_(False),
+            Employee.is_reference_manager.is_(False),
+        )
         .scalar()
         or 0
     )
     without_supervisor = (
         db.query(func.count(Employee.id))
-        .filter(Employee.is_archived.is_(False), Employee.supervisor_id.is_(None))
+        .filter(
+            Employee.is_archived.is_(False),
+            Employee.is_reference_manager.is_(False),
+            Employee.supervisor_id.is_(None),
+        )
         .scalar()
         or 0
     )
 
-    # Direct-report counts per supervisor (reports must be non-archived).
+    # Direct-report counts per supervisor (reports must be non-archived and
+    # themselves real employees).
     report_counts = (
         db.query(Employee.supervisor_id, func.count(Employee.id))
         .filter(
             Employee.is_archived.is_(False),
+            Employee.is_reference_manager.is_(False),
             Employee.supervisor_id.is_not(None),
         )
         .group_by(Employee.supervisor_id)
         .all()
     )
-    # supervisor_id is filtered non-null above, so every key is a real int.
+    # supervisor_id is filtered non-null above, so every key is a real int. Drop
+    # any static reference manager so it never surfaces as a manager node.
     counts_by_mgr: dict[int, int] = {
-        sup_id: n for sup_id, n in report_counts if sup_id is not None
+        sup_id: n
+        for sup_id, n in report_counts
+        if sup_id is not None and sup_id not in ref_mgr_ids
     }
 
     total_managers = len(counts_by_mgr)

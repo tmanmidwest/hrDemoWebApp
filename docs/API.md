@@ -142,6 +142,7 @@ Required scope: `employees:read` for GET, `employees:write` for all mutations.
 - `department_id=<id>` — filter by department
 - `is_active_status=true|false` — filter by whether the assigned employment status is active
 - `updated_since=<iso-datetime>` — incremental sync support
+- `include_reference_managers=true` — include static reference managers (stand-in supervisor records like `margaretmanager`), which are hidden from the list by default. They still appear as the `supervisor` object on their reports, remain fetchable by id, and stay assignable via `eligible_supervisor`.
 - `sort=<field>` and `order=asc|desc`
 
 ### Lookup Tables

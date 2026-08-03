@@ -26,7 +26,13 @@ from app.models.audit_event import AuditEvent
 from app.models.auth_provider import DEFAULT_SCOPES
 from app.services import backup as backup_service
 from app.services import branding as branding_service
-from app.services import mcp_gateway_tokens, mcp_token, seed_data, system_config
+from app.services import (
+    mcp_gateway_tokens,
+    mcp_token,
+    reference_managers,
+    seed_data,
+    system_config,
+)
 from app.services import scopes as scope_service
 from app.services.audit import prune_old_events, record_event
 from app.services.oidc import callback_url
@@ -1312,12 +1318,16 @@ def show_system(
     user: AppUser = Depends(require_admin),
 ) -> Response:
     config = system_config.get_config(db)
+    seed_manager = reference_managers.get_seed_manager(db)
     return render(
         request,
         "settings/system.html",
         current_user=user,
         active_subsection="system",
         form={"audit_retention_days": config.audit_retention_days},
+        reference_managers_enabled=config.reference_managers_enabled,
+        reference_manager_seeded=seed_manager is not None,
+        reference_manager_number=reference_managers.SEED_EMPLOYEE_NUMBER,
     )
 
 
@@ -1367,6 +1377,105 @@ def update_system(
     if pruned:
         msg += f" Removed {pruned} event(s) older than the new window."
     flash(request, msg, "success")
+    return RedirectResponse(url="/ui/settings/system", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Static reference managers (System settings)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/system/reference-managers")
+def update_reference_managers(
+    request: Request,
+    enabled: str | None = Form(default=None),
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    """Turn the static-reference-manager feature on or off for this instance."""
+    new_value = enabled is not None
+    previous = reference_managers.is_enabled(db)
+    reference_managers.set_enabled(db, new_value)
+
+    _settings_event(
+        request, user,
+        category="system",
+        event_type="system.settings.updated",
+        target_type="app_config",
+        message=f"{'Enabled' if new_value else 'Disabled'} static reference managers",
+        detail={"reference_managers_enabled": new_value, "previous": previous},
+    )
+
+    if new_value:
+        flash(
+            request,
+            "Static reference managers enabled. You can now create the "
+            f"'{reference_managers.SEED_EMPLOYEE_NUMBER}' record below.",
+            "success",
+        )
+    else:
+        flash(
+            request,
+            "Static reference managers disabled. Any existing static records "
+            "stay hidden from the API until you remove or unmark them.",
+            "success",
+        )
+    return RedirectResponse(url="/ui/settings/system", status_code=303)
+
+
+@router.post("/system/reference-managers/seed")
+def seed_reference_manager(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    """Create the seeded ``margaretmanager`` static reference record."""
+    if not reference_managers.is_enabled(db):
+        flash(
+            request,
+            "Enable static reference managers first, then create the record.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/settings/system", status_code=303)
+
+    manager, created = reference_managers.ensure_seed_manager(db)
+
+    if manager is None:
+        flash(
+            request,
+            "Could not create the static manager — the required lookup data "
+            "(country, employment status, department, job title) isn't seeded "
+            "yet. Seed the sample data first, then try again.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/settings/system", status_code=303)
+
+    if created:
+        _settings_event(
+            request, user,
+            category="employee",
+            event_type="employee.reference_manager_seeded",
+            target_type="employee",
+            target_id=manager.id,
+            target_label=(
+                f"{manager.first_name} {manager.last_name} "
+                f"({manager.employee_number})"
+            ),
+            message=f"Created static reference manager '{manager.employee_number}'",
+            detail={"employee_number": manager.employee_number},
+        )
+        flash(
+            request,
+            f"Created static reference manager '{manager.employee_number}'. "
+            "It's now assignable as a supervisor and hidden from the API roster.",
+            "success",
+        )
+    else:
+        flash(
+            request,
+            f"Static reference manager '{manager.employee_number}' already exists.",
+            "info",
+        )
     return RedirectResponse(url="/ui/settings/system", status_code=303)
 
 

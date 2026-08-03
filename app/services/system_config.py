@@ -56,17 +56,22 @@ def _load() -> dict[str, Any]:
     from app.models.app_config import APP_CONFIG_ID, AppConfig
 
     retention = _default_retention_days()
+    reference_managers_enabled = False
     db = get_session_factory()()
     try:
         row = db.get(AppConfig, APP_CONFIG_ID)
         if row is not None:
             retention = row.audit_retention_days
+            reference_managers_enabled = bool(row.reference_managers_enabled)
     except Exception:
         # Config is non-critical — never let a DB hiccup break a page or prune.
         pass
     finally:
         db.close()
-    return {"audit_retention_days": retention}
+    return {
+        "audit_retention_days": retention,
+        "reference_managers_enabled": reference_managers_enabled,
+    }
 
 
 def current_retention_days() -> int:
@@ -75,6 +80,14 @@ def current_retention_days() -> int:
     if _cache is None:
         _cache = _load()
     return int(_cache["audit_retention_days"])
+
+
+def reference_managers_enabled() -> bool:
+    """Return the cached static-reference-manager feature toggle."""
+    global _cache
+    if _cache is None:
+        _cache = _load()
+    return bool(_cache["reference_managers_enabled"])
 
 
 def set_retention_days(db: Session, days: int) -> None:

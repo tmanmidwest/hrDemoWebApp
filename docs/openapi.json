@@ -928,6 +928,10 @@
             "title": "Is Archived",
             "type": "boolean"
           },
+          "is_reference_manager": {
+            "title": "Is Reference Manager",
+            "type": "boolean"
+          },
           "job_title": {
             "$ref": "#/components/schemas/EmployeeJobTitleRef"
           },
@@ -1063,6 +1067,7 @@
           "hire_date",
           "termination_date",
           "supervisor",
+          "is_reference_manager",
           "is_archived",
           "archived_at",
           "created_at",
@@ -1143,6 +1148,11 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "is_reference_manager": {
+            "default": false,
+            "title": "Is Reference Manager",
+            "type": "boolean"
           },
           "last_name": {
             "title": "Last Name",
@@ -2573,7 +2583,7 @@
   "info": {
     "description": "Lightweight HR Source of Truth for Saviynt Identity Cloud POC and integration testing.",
     "title": "Demo HR Source of Truth App",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3670,6 +3680,18 @@
               ],
               "description": "When using eligible_supervisor on an edit form, exclude this employee.",
               "title": "Exclude Id"
+            }
+          },
+          {
+            "description": "Include static reference managers (stand-in supervisor records) in the results. They are excluded by default so downstream systems never treat them as real, syncable employees. They always remain assignable via eligible_supervisor and fetchable by id.",
+            "in": "query",
+            "name": "include_reference_managers",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include static reference managers (stand-in supervisor records) in the results. They are excluded by default so downstream systems never treat them as real, syncable employees. They always remain assignable via eligible_supervisor and fetchable by id.",
+              "title": "Include Reference Managers",
+              "type": "boolean"
             }
           },
           {

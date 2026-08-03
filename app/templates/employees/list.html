@@ -81,6 +81,7 @@
             <td>
               <div>{{ e.first_name }} {{ e.last_name }}</div>
               {% if e.is_archived %}<span class="badge badge--neutral text-xs">Archived</span>{% endif %}
+              {% if e.is_reference_manager %}<span class="badge badge--warning text-xs" title="Static reference manager — assignable as a supervisor but hidden from the API/MCP roster, CSV export, and reports.">Static</span>{% endif %}
             </td>
             <td>{{ M.status_badge(e.employment_status) }}</td>
             <td data-col="department">{{ e.department.name }}</td>

@@ -36,6 +36,7 @@ from app.services.employee_validation import (
     validate_state_belongs_to_country,
     validate_supervisor,
 )
+from app.services import reference_managers
 from app.services.audit import record_event
 from app.ui.dependencies import require_employee_manager, require_ui_user
 from app.ui.flash import flash
@@ -266,6 +267,7 @@ def show_new_form(
         form={},  # empty form
         form_action="/ui/employees/new",
         must_have_supervisor=not _no_eligible_supervisors(db),
+        reference_managers_enabled=reference_managers.is_enabled(db),
         **dropdowns,
     )
 
@@ -322,6 +324,7 @@ def show_edit_form(
             employee.termination_date.isoformat() if employee.termination_date else None
         ),
         "supervisor_id": employee.supervisor_id,
+        "is_reference_manager": employee.is_reference_manager,
     }
 
     return render(
@@ -333,6 +336,7 @@ def show_edit_form(
         form=form_data,
         form_action=f"/ui/employees/{employee.id}/edit",
         must_have_supervisor=employee.supervisor_id is not None,  # Bootstrap rows (e.g., the first employee) legitimately have no supervisor; preserve that.
+        reference_managers_enabled=reference_managers.is_enabled(db),
         **dropdowns,
     )
 
@@ -446,6 +450,8 @@ async def _parse_employee_form(request: Request) -> dict[str, object]:
         "hire_date": _parse_date(form.get("hire_date")),  # type: ignore[arg-type]
         "termination_date": _parse_date(form.get("termination_date")),  # type: ignore[arg-type]
         "supervisor_id": _parse_int(form.get("supervisor_id")),  # type: ignore[arg-type]
+        # Checkbox — present only when the reference-manager feature is enabled.
+        "is_reference_manager": form.get("is_reference_manager") is not None,
     }
 
 
@@ -482,6 +488,7 @@ def _render_form_with_error(
         ),
         error=error_msg,
         must_have_supervisor=must_have_supervisor,
+        reference_managers_enabled=reference_managers.is_enabled(db),
         **dropdowns,
     )
 
@@ -542,6 +549,11 @@ async def create_employee(
         return _render_form_with_error(
             request, user, db, None, data, msg, must_have_supervisor
         )
+
+    # Marking a record as a static reference manager is only honored when the
+    # feature is enabled for this instance; otherwise it stays a normal employee.
+    if not reference_managers.is_enabled(db):
+        data["is_reference_manager"] = False
 
     employee = Employee(**data)
     db.add(employee)
@@ -658,6 +670,11 @@ async def update_employee(
     # Preserve the existing SSN when the field was left blank on edit.
     if data["ssn"] is None:
         data["ssn"] = employee.ssn
+
+    # The static-reference-manager flag is only editable while the feature is
+    # enabled; otherwise preserve whatever the record already had.
+    if not reference_managers.is_enabled(db):
+        data["is_reference_manager"] = employee.is_reference_manager
 
     for field, value in data.items():
         setattr(employee, field, value)

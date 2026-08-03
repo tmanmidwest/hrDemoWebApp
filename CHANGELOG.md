@@ -6,6 +6,35 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.3.0] — 2026-08-03
+
+### Added
+
+**Static reference managers**
+- A new **static reference manager** — a stand-in supervisor record (the
+  canonical example is `margaretmanager`) that you can tag as the manager on
+  employees you add, without it being a syncable employee itself. Ideal for
+  POC instances that keep a few fixed users around for other use cases.
+- A flagged record is **hidden from every external/bulk read** — the API/MCP
+  `GET /employees` list, the CSV export, and the headcount/org reports — so
+  downstream systems (Saviynt, etc.) never try to provision or update it. It
+  is opt-in-visible via `?include_reference_managers=true` on the list
+  endpoint (and the matching MCP `list_employees` argument).
+- It still **resolves as the `supervisor`** on anyone who reports to it,
+  carrying `employee_number` (e.g. `margaretmanager`, no spaces) as the stable
+  manager handle, and remains **fetchable by id** and **assignable** via the
+  supervisor picker (`?eligible_supervisor=true`).
+- In the app's own web UI the record **stays visible**, badged **"Static"**,
+  so operators can see it at a glance.
+- **Enable per instance** from **Settings → System**: a feature toggle plus a
+  one-click **"Create static manager (Margaret)"** seed (Margaret Manager,
+  El Segundo, CA, `margaretmanager@saviynt.com`). Any employee can also be
+  marked static from the employee edit form once the feature is on.
+- Backward-compatible migration `0012` adds `employees.is_reference_manager`
+  (default false, so existing rows are unaffected) and the
+  `app_config.reference_managers_enabled` toggle. `EmployeeOut` gains an
+  `is_reference_manager` field.
+
 ## [1.2.0] — 2026-07-29
 
 ### Added

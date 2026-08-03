@@ -57,6 +57,11 @@ All tools are read-only.
 `departments`, `job_titles`, `locations`. The report tools are backed by the
 `/api/v1/reports/*` endpoints (see [API.md](API.md)).
 
+`list_employees` excludes static reference managers (stand-in supervisor records
+like `margaretmanager`) by default; pass `include_reference_managers=true` to
+include them. They still resolve as the `supervisor` on their reports and are
+fetchable by id via `get_employee`. See [Saviynt integration](SAVIYNT_INTEGRATION.md#reference-managers).
+
 ## Setup
 
 ### 1. Start the stack

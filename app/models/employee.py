@@ -107,6 +107,18 @@ class Employee(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
+    # Static reference manager. A row with this flag set is a stand-in manager
+    # (e.g. "margaretmanager") that exists only to be assigned as a supervisor.
+    # It is deliberately EXCLUDED from every external/bulk read — the API/MCP
+    # employee list, CSV export, and headcount/org reports — so downstream
+    # systems (Saviynt, etc.) never try to provision or update it. It still
+    # resolves as a supervisor reference and is fetchable by id, and it is still
+    # shown (badged "Static") in the app's own web UI. See app.services
+    # .reference_managers for the shared query filter and seed helper.
+    is_reference_manager: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True
+    )
+
     # Relationships
     country: Mapped[Country] = relationship("Country", lazy="joined")
     state_province: Mapped[StateProvince | None] = relationship(
