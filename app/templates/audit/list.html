@@ -120,7 +120,9 @@
       <td><span class="badge badge--neutral">{{ e.category }}</span></td>
       <td class="mono">{{ e.event_type }}</td>
       <td>
-        {{ e.actor_label or "—" }}
+        {% if e.actor_label %}
+        <a href="/ui/activity?actor={{ e.actor_label | urlencode }}" onclick="event.stopPropagation()" title="Show all activity by this actor">{{ e.actor_label }}</a>
+        {% else %}—{% endif %}
         {% if e.actor_type and e.actor_type not in ("user", "system") %}
         <span class="text-muted">({{ e.actor_type }})</span>
         {% endif %}

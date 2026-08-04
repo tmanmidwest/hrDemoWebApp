@@ -27,6 +27,7 @@ CATEGORIES: list[str] = [
     "auth",
     "oauth",
     "oidc",
+    "api",
     "employee",
     "lookup",
     "api_key",
@@ -38,9 +39,21 @@ CATEGORIES: list[str] = [
 ]
 OUTCOMES: list[str] = ["success", "failure", "error"]
 
-# Quick-filter "views" that group several categories. Lets a user pick, in one
-# click, "just the identity & OAuth logs" — the headline use case.
+# Actor types that identify a programmatic API caller (as opposed to a human UI
+# user or the system). Used by the "integrations" view.
+API_ACTOR_TYPES: list[str] = ["api_key", "oauth_client"]
+
+# Quick-filter "views". Most group several categories; "integrations" instead
+# groups by *actor* so it captures everything an API-key/OAuth caller did —
+# the access log AND the data changes — regardless of category.
 VIEWS: dict[str, dict[str, Any]] = {
+    "integrations": {
+        "label": "API & integrations",
+        # Union: every API access-log event (incl. failed bearer attempts, which
+        # have an anonymous actor) plus everything an API/OAuth caller did.
+        "categories": ["api"],
+        "actor_types": API_ACTOR_TYPES,
+    },
     "identity": {"label": "Identity & OAuth", "categories": ["auth", "oauth", "oidc"]},
     "data": {"label": "Data changes", "categories": ["employee", "lookup"]},
     "admin": {
@@ -90,7 +103,14 @@ def _filtered_query(
     if category:
         stmt = stmt.where(AuditEvent.category == category)
     elif view and view in VIEWS:
-        stmt = stmt.where(AuditEvent.category.in_(VIEWS[view]["categories"]))
+        spec = VIEWS[view]
+        conds = []
+        if "categories" in spec:
+            conds.append(AuditEvent.category.in_(spec["categories"]))
+        if "actor_types" in spec:
+            conds.append(AuditEvent.actor_type.in_(spec["actor_types"]))
+        if conds:
+            stmt = stmt.where(or_(*conds))
 
     if outcome:
         stmt = stmt.where(AuditEvent.outcome == outcome)

@@ -249,11 +249,21 @@ def get_authenticated_principal(
             "auth_success",
             extra={"method": "api_key", "principal": f"api_key:{api_key.key_prefix}"},
         )
-        return Principal(
+        principal = Principal(
             kind=PrincipalKind.API_KEY,
             api_key=api_key,
             scopes=frozenset(api_key.scope_set),
         )
+        # Stash plain primitives (not the ORM-bound Principal) so the API
+        # access-audit middleware can log this call *after* the request's DB
+        # session has closed without triggering a lazy load on a detached row.
+        request.state.api_audit = {
+            "actor_type": "api_key",
+            "actor_label": principal.identifier,
+            "kind": principal.kind.value,
+            "scopes": sorted(principal.scopes),
+        }
+        return principal
 
     # Then try JWT
     oauth_client = _validate_jwt(token, db, client_ip)
@@ -263,11 +273,18 @@ def get_authenticated_principal(
             extra={"method": "oauth", "principal": f"oauth:{oauth_client.client_id}"},
         )
         # OAuth-client tokens retain full access until scoping is added for them.
-        return Principal(
+        principal = Principal(
             kind=PrincipalKind.OAUTH,
             oauth_client=oauth_client,
             scopes=frozenset({scope_service.ADMIN}),
         )
+        request.state.api_audit = {
+            "actor_type": "oauth_client",
+            "actor_label": principal.identifier,
+            "kind": principal.kind.value,
+            "scopes": sorted(principal.scopes),
+        }
+        return principal
 
     # Token didn't match either pattern
     raise HTTPException(

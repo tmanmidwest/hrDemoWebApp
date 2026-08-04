@@ -124,6 +124,12 @@ def create_app() -> FastAPI:
         session_cookie="hrsot_session",
     )
 
+    # Audit every authenticated /api/v1 call (reads included) so integration
+    # activity is visible in the Activity log, not just data mutations.
+    from app.services.api_audit import ApiAccessAuditMiddleware
+
+    app.add_middleware(ApiAccessAuditMiddleware)
+
     # --- Routers ---
     from app.api.v1.api_keys import router as api_keys_router
     from app.api.v1.backup import router as backup_router
