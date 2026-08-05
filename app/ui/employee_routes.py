@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 from datetime import UTC, date, datetime
 from typing import Literal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import asc, desc, func
+from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.db import get_db
 from app.models import (
@@ -68,11 +69,73 @@ OPTIONAL_COLUMNS = [
 ]
 
 
-SORT_COLS = {
-    "employee_number": Employee.employee_number,
-    "last_name": Employee.last_name,
-    "hire_date": Employee.hire_date,
+# Every visible column is sortable. The values here are only the *scalar*
+# expressions that live directly on Employee; the related-table sorts
+# (department, job_title, supervisor, country, location, status) are resolved
+# inside list_employees because some need an explicit/aliased join.
+SORT_KEYS = {
+    "employee_number",
+    "last_name",
+    "status",
+    "department",
+    "job_title",
+    "work_email",
+    "supervisor",
+    "hire_date",
+    "country",
+    "location",
 }
+
+
+def _parse_int(value: str | None) -> int | None:
+    """Coerce a form value to an int, treating blank/non-numeric as None.
+
+    Filter params arrive as strings (an unselected dropdown submits ""), so we
+    can't type them as `int | None` on the endpoint without tripping FastAPI's
+    422 on the empty string. Parse defensively instead.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    return int(value) if value.isdigit() else None
+
+
+def _parse_date(value: str | None) -> date | None:
+    """Coerce an ISO date string (yyyy-mm-dd) to a date, or None if unparseable."""
+    if not value or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+# Maps the internal `filters` dict keys to their URL query-param names, so the
+# active filters can be re-encoded into sort-header and view-tab links.
+_FILTER_PARAM_NAMES = {
+    "q": "q",
+    "employee_number": "f_employee_number",
+    "name": "f_name",
+    "status": "f_status",
+    "department": "f_department",
+    "job_title": "f_job_title",
+    "work_email": "f_work_email",
+    "supervisor": "f_supervisor",
+    "country": "f_country",
+    "location": "f_location",
+    "hire_from": "f_hire_from",
+    "hire_to": "f_hire_to",
+}
+
+
+def _filter_params(filters: dict) -> dict:
+    """Non-empty active filters keyed by their URL param name (for link building)."""
+    out: dict[str, object] = {}
+    for key, param in _FILTER_PARAM_NAMES.items():
+        value = filters.get(key)
+        if value not in (None, ""):
+            out[param] = value
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -86,10 +149,37 @@ def list_employees(
     view: Literal["active", "all", "archived"] = "active",
     sort: str = "last_name",
     order: Literal["asc", "desc"] = "asc",
+    # Global search across identity/contact text fields.
+    q: str = "",
+    # Per-column filters. FK columns arrive as id strings ("" when unset);
+    # text columns are substring matches; hire date is a range.
+    f_employee_number: str = "",
+    f_name: str = "",
+    f_status: str = "",
+    f_department: str = "",
+    f_job_title: str = "",
+    f_work_email: str = "",
+    f_supervisor: str = "",
+    f_country: str = "",
+    f_location: str = "",
+    f_hire_from: str = "",
+    f_hire_to: str = "",
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_ui_user),
 ) -> Response:
-    query = db.query(Employee).join(Employee.employment_status)
+    # Supervisor is self-referential, so sorting by supervisor name needs an
+    # aliased join distinct from the eager-loaded `supervisor` relationship.
+    supervisor_alias = aliased(Employee)
+
+    query = (
+        db.query(Employee)
+        .join(Employee.employment_status)
+        .join(Employee.department)
+        .join(Employee.job_title)
+        .join(Employee.country)
+        .outerjoin(Location, Employee.location_id == Location.id)
+        .outerjoin(supervisor_alias, Employee.supervisor_id == supervisor_alias.id)
+    )
 
     if view == "active":
         query = query.filter(Employee.is_archived.is_(False))
@@ -97,19 +187,84 @@ def list_employees(
         query = query.filter(Employee.is_archived.is_(True))
     # else "all" — no archive filter
 
-    if sort not in SORT_COLS:
+    # ---- Filters -----------------------------------------------------------
+    q = q.strip()
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            or_(
+                Employee.employee_number.ilike(like),
+                Employee.first_name.ilike(like),
+                Employee.last_name.ilike(like),
+                Employee.work_email.ilike(like),
+                Employee.personal_email.ilike(like),
+            )
+        )
+    if f_employee_number.strip():
+        query = query.filter(Employee.employee_number.ilike(f"%{f_employee_number.strip()}%"))
+    if f_name.strip():
+        name_like = f"%{f_name.strip()}%"
+        query = query.filter(
+            or_(Employee.first_name.ilike(name_like), Employee.last_name.ilike(name_like))
+        )
+    if f_work_email.strip():
+        query = query.filter(Employee.work_email.ilike(f"%{f_work_email.strip()}%"))
+
+    status_id = _parse_int(f_status)
+    department_id = _parse_int(f_department)
+    job_title_id = _parse_int(f_job_title)
+    supervisor_id = _parse_int(f_supervisor)
+    country_id = _parse_int(f_country)
+    location_id = _parse_int(f_location)
+    if status_id is not None:
+        query = query.filter(Employee.employment_status_id == status_id)
+    if department_id is not None:
+        query = query.filter(Employee.department_id == department_id)
+    if job_title_id is not None:
+        query = query.filter(Employee.job_title_id == job_title_id)
+    if supervisor_id is not None:
+        query = query.filter(Employee.supervisor_id == supervisor_id)
+    if country_id is not None:
+        query = query.filter(Employee.country_id == country_id)
+    if location_id is not None:
+        query = query.filter(Employee.location_id == location_id)
+
+    hire_from = _parse_date(f_hire_from)
+    hire_to = _parse_date(f_hire_to)
+    if hire_from is not None:
+        query = query.filter(Employee.hire_date >= hire_from)
+    if hire_to is not None:
+        query = query.filter(Employee.hire_date <= hire_to)
+
+    # ---- Sorting -----------------------------------------------------------
+    if sort not in SORT_KEYS:
         sort = "last_name"
+    sort_exprs = {
+        "employee_number": Employee.employee_number,
+        "last_name": Employee.last_name,
+        "status": EmploymentStatus.label,
+        "department": Department.name,
+        "job_title": JobTitle.name,
+        "work_email": Employee.work_email,
+        "supervisor": supervisor_alias.last_name,
+        "hire_date": Employee.hire_date,
+        "country": Country.name,
+        "location": Location.name,
+    }
     order_fn = desc if order == "desc" else asc
-    sort_col = SORT_COLS[sort]
-    # Active-first per spec
+    # Active-first grouping is preserved, then the chosen column, then a stable
+    # name tiebreaker so equal values don't reshuffle between requests.
     query = query.order_by(
         desc(EmploymentStatus.is_active_status),
-        order_fn(sort_col),
+        order_fn(sort_exprs[sort]),
+        Employee.last_name,
+        Employee.first_name,
     )
 
     employees = query.all()
 
-    # Counts for header
+    # Counts for header — these describe the whole dataset, not the filtered
+    # view, so the summary line stays stable as filters change.
     active_count = (
         db.query(func.count(Employee.id))
         .join(Employee.employment_status)
@@ -128,6 +283,51 @@ def list_employees(
         db.query(func.count(Employee.id)).filter(Employee.is_archived.is_(True)).scalar() or 0
     )
 
+    # ---- Filter option lists (dropdowns), as {id, label} -------------------
+    statuses = db.query(EmploymentStatus).order_by(EmploymentStatus.value).all()
+    departments = db.query(Department).order_by(Department.name).all()
+    job_titles = db.query(JobTitle).order_by(JobTitle.name).all()
+    countries = db.query(Country).order_by(Country.name).all()
+    locations = db.query(Location).order_by(Location.name).all()
+    # Only employees who actually supervise someone are useful as a filter.
+    supervisor_id_subq = (
+        db.query(Employee.supervisor_id)
+        .filter(Employee.supervisor_id.isnot(None))
+        .distinct()
+    )
+    supervisors = (
+        db.query(Employee)
+        .filter(Employee.id.in_(supervisor_id_subq))
+        .order_by(Employee.last_name, Employee.first_name)
+        .all()
+    )
+
+    def _opts(rows, label) -> list[dict]:
+        return [{"id": r.id, "label": label(r)} for r in rows]
+
+    # Current filter values, echoed back to prefill the controls.
+    filters = {
+        "q": q,
+        "employee_number": f_employee_number.strip(),
+        "name": f_name.strip(),
+        "status": status_id,
+        "department": department_id,
+        "job_title": job_title_id,
+        "work_email": f_work_email.strip(),
+        "supervisor": supervisor_id,
+        "country": country_id,
+        "location": location_id,
+        "hire_from": f_hire_from.strip(),
+        "hire_to": f_hire_to.strip(),
+    }
+    has_filters = any(filters.values())
+
+    # Pre-encoded query strings so the sort headers and view tabs preserve the
+    # active filters. Sort links append their own sort/order; tabs append view.
+    active_params = {k: v for k, v in _filter_params(filters).items()}
+    sort_qs = urlencode({"view": view, **active_params})
+    tab_qs = urlencode({"sort": sort, "order": order, **active_params})
+
     return render(
         request,
         "employees/list.html",
@@ -143,6 +343,20 @@ def list_employees(
             "archived": archived_count,
         },
         optional_cols=OPTIONAL_COLUMNS,
+        filters=filters,
+        has_filters=has_filters,
+        filter_options={
+            "statuses": _opts(statuses, lambda r: r.label),
+            "departments": _opts(departments, lambda r: r.name),
+            "job_titles": _opts(job_titles, lambda r: r.name),
+            "supervisors": _opts(
+                supervisors, lambda r: f"{r.first_name} {r.last_name} ({r.employee_number})"
+            ),
+            "countries": _opts(countries, lambda r: r.name),
+            "locations": _opts(locations, lambda r: r.name),
+        },
+        sort_qs=sort_qs,
+        tab_qs=tab_qs,
     )
 
 

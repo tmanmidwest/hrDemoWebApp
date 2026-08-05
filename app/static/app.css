@@ -661,6 +661,83 @@ code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
   opacity: 0.7;
 }
 
+/* Filter toolbar (search + apply + columns) stacked under the tabs. */
+.card__header--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-4);
+}
+
+.emp-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.emp-toolbar__search {
+  flex: 1 1 240px;
+  min-width: 180px;
+  padding: 6px var(--s-3);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.emp-toolbar__search:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(30, 41, 59, 0.08);
+}
+
+/* Per-column filter row. Kept as a normal (non-sticky) second header row so it
+ * doesn't overlap the sticky sort row on vertical scroll. */
+.table__filters th {
+  position: static;
+  background: var(--surface-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--line);
+  text-transform: none;
+  font-weight: 400;
+  vertical-align: top;
+}
+
+.table__filter-control {
+  width: 100%;
+  min-width: 90px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+}
+
+.table__filter-control:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(30, 41, 59, 0.08);
+}
+
+.table__filter-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.table__empty-cell {
+  text-align: center;
+  padding: var(--s-12) var(--s-6);
+  color: var(--text-muted);
+}
+
 /* =====================================================
  * Badges
  * ===================================================== */

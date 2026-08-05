@@ -6,6 +6,30 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.5.0] — 2026-08-05
+
+### Added
+
+**Sort & filter every column on the Employees list**
+- **Every column is now sortable** — Employee #, Name, Status, Department, Job
+  Title, Work Email, Supervisor, Hire Date, Country, and Location — via the
+  clickable header arrows (previously only Employee #, Name, and Hire Date).
+  Related-column sorts (department, supervisor, etc.) order by the displayed
+  name; active employees still group first.
+- **Global search box** above the table matches across employee number, first/
+  last name, and work/personal email in one query.
+- **Per-column filters** in a new filter row under the headers: substring boxes
+  for the text columns (Employee #, Name, Work Email), dropdowns for the
+  categorical columns (Status, Department, Job Title, Supervisor, Country,
+  Location), and a from/to date range for Hire Date.
+- Search, filters, and sort all live in the **URL query string**, so a filtered
+  view is shareable and bookmarkable, sorting a filtered list keeps the filters,
+  and switching Active/All/Archived tabs preserves them. A **Clear filters**
+  button appears whenever any filter is active. Blank controls are dropped on
+  submit so URLs stay tidy.
+- Read-only (view-only) users can sort and filter too; the filter row respects
+  the existing show/hide **Columns** picker. No schema change.
+
 ## [1.4.0] — 2026-08-05
 
 ### Added

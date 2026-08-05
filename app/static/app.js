@@ -64,6 +64,21 @@ function applyColumnVisibility(colName, visible) {
 
 document.querySelectorAll('.col-picker').forEach(setupColumnPicker);
 
+// Filter forms: drop blank fields on submit so the resulting URL only carries
+// active filters (e.g. ?view=active&f_department=3 instead of a dozen empties).
+document.querySelectorAll('form[data-strip-empty]').forEach((form) => {
+  form.addEventListener('submit', () => {
+    // Controls bound via the HTML5 form= attribute live outside the <form>,
+    // so collect by association, not by DOM descent.
+    const controls = form.elements ? Array.from(form.elements) : [];
+    controls.forEach((el) => {
+      if (el.name && el.type !== 'submit' && el.value === '') {
+        el.disabled = true; // disabled controls are omitted from the query string
+      }
+    });
+  });
+});
+
 // Modal: close on Escape, close on overlay click
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {

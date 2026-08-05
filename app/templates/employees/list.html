@@ -3,6 +3,23 @@
 {% set page_title = "Employees" %}
 {% block breadcrumb %}<span>Employees</span>{% endblock %}
 
+{# Per-column filter dropdown. Associated with the standalone #empfilter form
+   via the HTML5 form= attribute so it can live inside the table (which also
+   contains the per-row POST forms) without illegal form nesting. #}
+{% macro filter_select(name, current, options) %}
+<select name="{{ name }}" form="empfilter" class="table__filter-control">
+  <option value="">All</option>
+  {% for opt in options %}
+  <option value="{{ opt.id }}" {% if current == opt.id %}selected{% endif %}>{{ opt.label }}</option>
+  {% endfor %}
+</select>
+{% endmacro %}
+
+{% macro filter_text(name, current, placeholder) %}
+<input type="text" name="{{ name }}" form="empfilter" value="{{ current }}"
+       class="table__filter-control" placeholder="{{ placeholder }}" autocomplete="off" />
+{% endmacro %}
+
 {% block main %}
 
 <div class="page-header">
@@ -27,14 +44,36 @@
   {% endif %}
 </div>
 
+{# Standalone filter form. Empty on purpose — every search/filter control below
+   binds to it with form="empfilter". data-strip-empty drops blank fields on
+   submit so the resulting URL only carries active filters. #}
+<form id="empfilter" method="get" action="/ui/employees" data-strip-empty>
+  <input type="hidden" name="view" value="{{ view }}" />
+  <input type="hidden" name="sort" value="{{ sort }}" />
+  <input type="hidden" name="order" value="{{ order }}" />
+</form>
+
 <div class="card">
-  <div class="card__header">
-    <div class="flex gap-3" style="align-items: center;">
+  <div class="card__header card__header--stack">
+    <div class="flex-between">
       <div class="tabs">
-        <a href="/ui/employees?view=active" class="tabs__tab {% if view == 'active' %}is-active{% endif %}">Active</a>
-        <a href="/ui/employees?view=all" class="tabs__tab {% if view == 'all' %}is-active{% endif %}">All</a>
-        <a href="/ui/employees?view=archived" class="tabs__tab {% if view == 'archived' %}is-active{% endif %}">Archived</a>
+        <a href="/ui/employees?view=active&amp;{{ tab_qs }}" class="tabs__tab {% if view == 'active' %}is-active{% endif %}">Active</a>
+        <a href="/ui/employees?view=all&amp;{{ tab_qs }}" class="tabs__tab {% if view == 'all' %}is-active{% endif %}">All</a>
+        <a href="/ui/employees?view=archived&amp;{{ tab_qs }}" class="tabs__tab {% if view == 'archived' %}is-active{% endif %}">Archived</a>
       </div>
+      <div class="text-faint text-xs">
+        Showing {{ employees | length }} employee{{ '' if employees | length == 1 else 's' }}
+      </div>
+    </div>
+
+    <div class="emp-toolbar">
+      <input type="search" name="q" form="empfilter" value="{{ filters.q }}"
+             class="emp-toolbar__search" placeholder="Search name, employee #, or email…" autocomplete="off" />
+      <button type="submit" form="empfilter" class="btn btn--primary btn--sm">Apply</button>
+      {% if has_filters %}
+      <a href="/ui/employees?view={{ view }}&amp;sort={{ sort }}&amp;order={{ order }}"
+         class="btn btn--ghost btn--sm">Clear filters</a>
+      {% endif %}
 
       <div class="col-picker" data-storage-key="hrsot.cols.employees">
         <button class="btn btn--ghost btn--sm col-picker__trigger" type="button" aria-haspopup="true">
@@ -50,37 +89,65 @@
         </div>
       </div>
     </div>
-    <div class="text-faint text-xs">
-      Showing {{ employees | length }} employee{{ '' if employees | length == 1 else 's' }}
-    </div>
   </div>
 
   <div class="card__body" style="padding: 0;">
-    {% if not employees %}
-    <div class="table__empty">
-      <div class="table__empty-text">No employees match this view.</div>
-      <div class="table__empty-hint">Try a different tab{% if current_user.can_manage_employees %} or <a href="/ui/employees/new">add an employee</a>{% endif %}.</div>
-    </div>
-    {% else %}
-    {% set qs = "view=" ~ view %}
     <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
-            <th>{{ M.sort_link("employee_number", "Employee #", sort, order, "/ui/employees", qs) }}</th>
-            <th>{{ M.sort_link("last_name", "Name", sort, order, "/ui/employees", qs) }}</th>
-            <th>Status</th>
-            <th data-col="department">Department</th>
-            <th data-col="job_title">Job Title</th>
-            <th data-col="work_email">Work Email</th>
-            <th data-col="supervisor">Supervisor</th>
-            <th data-col="hire_date">{{ M.sort_link("hire_date", "Hire Date", sort, order, "/ui/employees", qs) }}</th>
-            <th data-col="country">Country</th>
-            <th data-col="location">Location</th>
+            <th>{{ M.sort_link("employee_number", "Employee #", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th>{{ M.sort_link("last_name", "Name", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th>{{ M.sort_link("status", "Status", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="department">{{ M.sort_link("department", "Department", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="job_title">{{ M.sort_link("job_title", "Job Title", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="work_email">{{ M.sort_link("work_email", "Work Email", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="supervisor">{{ M.sort_link("supervisor", "Supervisor", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="hire_date">{{ M.sort_link("hire_date", "Hire Date", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="country">{{ M.sort_link("country", "Country", sort, order, "/ui/employees", sort_qs) }}</th>
+            <th data-col="location">{{ M.sort_link("location", "Location", sort, order, "/ui/employees", sort_qs) }}</th>
             {% if current_user.can_manage_employees %}<th style="text-align:right;">Actions</th>{% endif %}
+          </tr>
+          <tr class="table__filters">
+            <th>{{ filter_text("f_employee_number", filters.employee_number, "Filter…") }}</th>
+            <th>{{ filter_text("f_name", filters.name, "Filter…") }}</th>
+            <th>{{ filter_select("f_status", filters.status, filter_options.statuses) }}</th>
+            <th data-col="department">{{ filter_select("f_department", filters.department, filter_options.departments) }}</th>
+            <th data-col="job_title">{{ filter_select("f_job_title", filters.job_title, filter_options.job_titles) }}</th>
+            <th data-col="work_email">{{ filter_text("f_work_email", filters.work_email, "Filter…") }}</th>
+            <th data-col="supervisor">{{ filter_select("f_supervisor", filters.supervisor, filter_options.supervisors) }}</th>
+            <th data-col="hire_date">
+              <div class="table__filter-range">
+                <input type="date" name="f_hire_from" form="empfilter" value="{{ filters.hire_from }}"
+                       class="table__filter-control" aria-label="Hired on or after" title="Hired on or after" />
+                <input type="date" name="f_hire_to" form="empfilter" value="{{ filters.hire_to }}"
+                       class="table__filter-control" aria-label="Hired on or before" title="Hired on or before" />
+              </div>
+            </th>
+            <th data-col="country">{{ filter_select("f_country", filters.country, filter_options.countries) }}</th>
+            <th data-col="location">{{ filter_select("f_location", filters.location, filter_options.locations) }}</th>
+            {% if current_user.can_manage_employees %}
+            <th style="text-align:right;">
+              <button type="submit" form="empfilter" class="btn btn--ghost btn--sm">Apply</button>
+            </th>
+            {% endif %}
           </tr>
         </thead>
         <tbody>
+          {% if not employees %}
+          <tr>
+            <td colspan="12" class="table__empty-cell">
+              <div class="table__empty-text">No employees match{% if has_filters %} these filters{% else %} this view{% endif %}.</div>
+              <div class="table__empty-hint">
+                {% if has_filters %}
+                  <a href="/ui/employees?view={{ view }}&amp;sort={{ sort }}&amp;order={{ order }}">Clear filters</a> to see everyone{% if current_user.can_manage_employees %}, or <a href="/ui/employees/new">add an employee</a>{% endif %}.
+                {% else %}
+                  Try a different tab{% if current_user.can_manage_employees %} or <a href="/ui/employees/new">add an employee</a>{% endif %}.
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
           {% for e in employees %}
           <tr class="{% if e.is_archived %}is-archived{% endif %}">
             <td class="mono">{{ e.employee_number }}</td>
@@ -122,10 +189,10 @@
             {% endif %}
           </tr>
           {% endfor %}
+          {% endif %}
         </tbody>
       </table>
     </div>
-    {% endif %}
   </div>
 </div>
 
