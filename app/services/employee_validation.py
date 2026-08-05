@@ -214,6 +214,37 @@ def validate_ssn_unique(
         )
 
 
+def validate_employee_number_unique(
+    db: Session,
+    employee_number: str,
+    excluding_employee_id: int | None = None,
+) -> None:
+    """Reject a duplicate employee number.
+
+    The `employee_number` column already carries a DB-level unique constraint,
+    but that only surfaces as an IntegrityError after commit. This gives the
+    create/update flows a friendly, case-insensitive pre-commit check.
+
+    Matches against ALL employees — including archived/soft-deleted ones — so a
+    number belonging to a terminated record can't be silently reused. On an edit,
+    pass excluding_employee_id so the employee doesn't collide with their own
+    existing number.
+    """
+    query = db.query(Employee).filter(
+        Employee.employee_number_normalized() == employee_number.strip().lower()
+    )
+    if excluding_employee_id is not None:
+        query = query.filter(Employee.id != excluding_employee_id)
+    existing = query.first()
+    if existing is not None:
+        label = f"{existing.first_name} {existing.last_name}"
+        suffix = " — that record is archived" if existing.is_archived else ""
+        raise _bad_request(
+            f"Employee number '{employee_number}' is already in use by "
+            f"{label}{suffix}."
+        )
+
+
 def validate_dob(dob: date) -> None:
     """Date of birth can't be in the future or absurdly far in the past."""
     today = date.today()

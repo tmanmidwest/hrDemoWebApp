@@ -28,6 +28,7 @@ from app.services.employee_validation import (
     validate_country_id,
     validate_department,
     validate_dob,
+    validate_employee_number_unique,
     validate_employment_status,
     validate_job_title_belongs_to_department,
     validate_location,
@@ -38,7 +39,11 @@ from app.services.employee_validation import (
 )
 from app.services import reference_managers
 from app.services.audit import record_event
-from app.ui.dependencies import require_employee_manager, require_ui_user
+from app.ui.dependencies import (
+    require_admin,
+    require_employee_manager,
+    require_ui_user,
+)
 from app.ui.flash import flash
 from app.ui.templating import render
 
@@ -544,6 +549,7 @@ async def create_employee(
         for field in ("employee_number", "first_name", "last_name"):
             if not data[field]:
                 raise ValueError(f"{field.replace('_', ' ').title()} is required.")
+        validate_employee_number_unique(db, data["employee_number"])  # type: ignore[arg-type]
     except (HTTPException, ValueError) as exc:
         msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
         return _render_form_with_error(
@@ -662,6 +668,10 @@ async def update_employee(
             validate_ssn_format(data["ssn"])  # type: ignore[arg-type]
             validate_ssn_unique(
                 db, data["ssn"], excluding_employee_id=employee_id  # type: ignore[arg-type]
+            )
+        if data["employee_number"]:
+            validate_employee_number_unique(
+                db, data["employee_number"], excluding_employee_id=employee_id  # type: ignore[arg-type]
             )
     except (HTTPException, ValueError) as exc:
         msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
@@ -797,4 +807,74 @@ def restore_employee(
             request=request,
         )
         flash(request, f"Employee {employee.employee_number} restored.", "success")
+    return RedirectResponse(url="/ui/employees?view=archived", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Purge archived (admin-only cleanup)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/purge-archived")
+def purge_archived_employees(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_admin),
+) -> Response:
+    """Permanently delete every archived employee. Admin-only, irreversible."""
+    archived = (
+        db.query(Employee)
+        .filter(Employee.is_archived.is_(True))
+        .order_by(Employee.last_name, Employee.first_name)
+        .all()
+    )
+    count = len(archived)
+
+    if count == 0:
+        flash(request, "There are no archived employees to delete.", "info")
+        return RedirectResponse(url="/ui/employees?view=archived", status_code=303)
+
+    archived_ids = [e.id for e in archived]
+    # Snapshot labels before deletion for the audit detail.
+    purged_labels = [_emp_label(e) for e in archived]
+
+    # FOREIGN KEY enforcement is on (see app/db.py), and supervisor_id is a
+    # self-referential FK. An employee we're keeping may still point at an
+    # archived supervisor (e.g., a supervisor archived after assignment), and
+    # archived employees may reference one another. Null out any supervisor_id
+    # that references a to-be-deleted row so the deletes don't hit a FK error.
+    (
+        db.query(Employee)
+        .filter(Employee.supervisor_id.in_(archived_ids))
+        .update({Employee.supervisor_id: None}, synchronize_session=False)
+    )
+
+    for employee in archived:
+        db.delete(employee)
+    db.commit()
+
+    log.info(
+        "ui_employees_purged_archived",
+        extra={"count": count, "by": user.username},
+    )
+    record_event(
+        category="employee",
+        event_type="employee.purged_archived",
+        actor_type="user",
+        actor_label=user.username,
+        actor_id=user.id,
+        target_type="employee",
+        message=f"Deleted {count} archived employee{'' if count == 1 else 's'}",
+        detail={
+            "surface": "ui",
+            "count": count,
+            "employees": purged_labels,
+        },
+        request=request,
+    )
+    flash(
+        request,
+        f"Deleted {count} archived employee{'' if count == 1 else 's'}.",
+        "success",
+    )
     return RedirectResponse(url="/ui/employees?view=archived", status_code=303)

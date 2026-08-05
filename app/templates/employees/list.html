@@ -14,6 +14,12 @@
   </div>
   {% if current_user.can_manage_employees %}
   <div class="page-header__actions">
+    {% if current_user.is_admin and view == 'archived' and counts.archived > 0 %}
+    <form action="/ui/employees/purge-archived" method="post" style="margin:0;"
+          onsubmit="return confirm('Permanently delete all {{ counts.archived }} archived employee{{ '' if counts.archived == 1 else 's' }}? This cannot be undone.');">
+      <button type="submit" class="btn btn--danger">Delete all archived ({{ counts.archived }})</button>
+    </form>
+    {% endif %}
     <a href="/ui/employees/export.csv" class="btn btn--secondary">Export CSV</a>
     <a href="/ui/employees/import" class="btn btn--secondary">Import CSV</a>
     <a href="/ui/employees/new" class="btn btn--primary">+ Add Employee</a>
@@ -99,17 +105,19 @@
             <td data-col="location" class="text-muted">{{ e.location.name if e.location else "—" }}</td>
             {% if current_user.can_manage_employees %}
             <td class="table__actions">
-              <a href="/ui/employees/{{ e.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
-              {% if e.is_archived %}
-                <form action="/ui/employees/{{ e.id }}/restore" method="post" style="margin:0;">
-                  <button type="submit" class="btn btn--ghost btn--sm">Restore</button>
-                </form>
-              {% else %}
-                <form action="/ui/employees/{{ e.id }}/archive" method="post" style="margin:0;"
-                      onsubmit="return confirm('Archive this employee? They will be hidden from the default list.');">
-                  <button type="submit" class="btn btn--ghost btn--sm">Archive</button>
-                </form>
-              {% endif %}
+              <div class="table__actions-row">
+                <a href="/ui/employees/{{ e.id }}/edit" class="btn btn--ghost btn--sm">Edit</a>
+                {% if e.is_archived %}
+                  <form action="/ui/employees/{{ e.id }}/restore" method="post" style="margin:0;">
+                    <button type="submit" class="btn btn--ghost btn--sm">Restore</button>
+                  </form>
+                {% else %}
+                  <form action="/ui/employees/{{ e.id }}/archive" method="post" style="margin:0;"
+                        onsubmit="return confirm('Archive this employee? They will be hidden from the default list.');">
+                    <button type="submit" class="btn btn--ghost btn--sm">Archive</button>
+                  </form>
+                {% endif %}
+              </div>
             </td>
             {% endif %}
           </tr>

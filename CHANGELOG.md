@@ -6,6 +6,33 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.4.0] — 2026-08-05
+
+### Added
+
+**Employee-number uniqueness check on create/edit**
+- Adding (or editing) an employee now validates the **employee number** up
+  front: if another record already uses that number, the form re-renders with
+  a clear message naming the conflicting employee — instead of only failing at
+  the database layer after submit.
+- The check is **case-insensitive** and trims surrounding whitespace (so
+  `E00001`, `e00001`, and `  E00001  ` all collide), and it matches against
+  **archived records too**, so a number tied to a terminated employee can't be
+  silently reused. On edit, an employee keeps its own number without colliding
+  with itself.
+
+**Admin cleanup: delete all archived employees**
+- Admins get a **"Delete all archived"** button on the Employees list's
+  **Archived** tab that permanently removes every archived (soft-deleted)
+  employee in one action — for cleaning out records that will never be
+  restored. It is guarded by a typed confirmation prompt and is **admin-only**
+  (management and view-only users neither see the button nor can hit the route).
+- The purge safely clears any lingering **supervisor** references to a deleted
+  record first, so it never trips the self-referential foreign key, and it
+  writes an `employee.purged_archived` **audit event** capturing who ran it and
+  which employees were removed.
+- No schema change — existing data, API keys, and integrations are unaffected.
+
 ## [1.3.0] — 2026-08-03
 
 ### Added
