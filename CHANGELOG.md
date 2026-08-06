@@ -6,6 +6,27 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.5.1] — 2026-08-06
+
+### Fixed
+
+**MCP server container crash-looped on fresh builds (`mcp 2.0` incompatibility)**
+- The MCP image dependency was pinned as `mcp>=1.28.0` with **no upper bound**.
+  `mcp 2.0.0` (released 2026-07-28) is a major SDK rework that drops the
+  `mcp.server.fastmcp` import path the server is written against, so any image
+  built on/after that date pulled 2.x and died on startup with
+  `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`. Because the
+  container never finished starting, it never bound its port — surfacing in
+  Portainer as **"no published ports"** even though `HRMCP_HOST_PORT` was set
+  correctly. The app container (`hr-sot`) was unaffected.
+- Capped the dependency to `mcp>=1.28.0,<2.0` so builds resolve to the latest
+  1.x release. **Rebuild the MCP image** to pick up the fix (an env-only stack
+  update won't help — the bad wheel is baked into the image layer): in Portainer
+  redeploy with **Re-pull image and redeploy**, or run
+  `docker compose up -d --build hr-mcp`.
+- No code, schema, or configuration change; existing data and API keys are
+  unaffected.
+
 ## [1.5.0] — 2026-08-05
 
 ### Added
