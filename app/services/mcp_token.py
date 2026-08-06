@@ -8,8 +8,9 @@ reads this file live on each request, so a rotation in the UI takes effect on th
 server's very next call.
 
 Rotating creates a fresh ``ApiKey`` row (named "MCP Server") and revokes the
-previous one, so an old token stops working immediately. The key is granted only
-the read scopes the MCP tools need (least privilege).
+previous one, so an old token stops working immediately. The key is granted the
+scopes the MCP tools need (:data:`MCP_KEY_SCOPES` — employee and lookup read
+*and* write, plus reports), and nothing more (no user/key admin or backup).
 """
 
 from __future__ import annotations
@@ -31,9 +32,19 @@ log = logging.getLogger(__name__)
 TOKEN_FILENAME = "mcp_api_key"
 MCP_KEY_NAME = "MCP Server"
 
-# Scopes granted to the MCP server's own key. The tools are read-only, so this is
-# the least-privilege set that lets them list employees/lookups and run reports.
-MCP_KEY_SCOPES = ["employees:read", "lookups:read", "reports:read"]
+# Scopes granted to the MCP server's own key. The MCP tools cover the full
+# employee lifecycle and lookup management (create/update/archive/terminate,
+# lookup create/update/delete) in addition to reads and reports, so the key needs
+# the matching write scopes. Deliberately excludes users:write, api-key/OAuth
+# admin, and backup:create — those stay out of the MCP surface. Rotate the MCP key
+# in the app UI (Settings → MCP) after upgrading so an existing key picks these up.
+MCP_KEY_SCOPES = [
+    "employees:read",
+    "employees:write",
+    "lookups:read",
+    "lookups:write",
+    "reports:read",
+]
 
 
 def token_path(settings: Settings | None = None) -> Path:

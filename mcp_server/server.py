@@ -2,8 +2,10 @@
 
 Design
 ------
-This server is a small, **stateless** proxy that exposes read-only MCP tools over
-the HR REST API. It uses two credentials, both created and rotated in the app UI
+This server is a small, **stateless** proxy that exposes MCP tools over the HR
+REST API — reads (list/get, reports) plus writes (create/update employees,
+archive/restore, terminate/reactivate, and lookup create/update/delete). It uses
+two credentials, both created and rotated in the app UI
 (Settings → MCP) and read live from the shared data volume — this container holds
 no database and needs no secrets baked in at deploy time:
 
@@ -41,9 +43,14 @@ log = logging.getLogger("hrsot-mcp")
 mcp = FastMCP(
     settings.server_name,
     instructions=(
-        "Query the Demo HR Source-of-Truth system: list employees and lookups, "
-        "and run aggregate headcount, org-structure, and activity reports. All "
-        "tools are read-only."
+        "Read and manage the Demo HR Source-of-Truth system: list/get employees "
+        "and lookups; run headcount, org-structure, and activity reports; and "
+        "create, update, archive/restore, and terminate/reactivate employees, "
+        "plus create/update/delete lookup records (departments, job titles, "
+        "locations, countries, states, employment statuses). Resolve the "
+        "*_id fields with list_lookups / list_employees before writing. Writes "
+        "are audited and require the MCP key to hold employees:write / "
+        "lookups:write."
     ),
     host=settings.bind_host,
     port=settings.bind_port,
@@ -94,12 +101,8 @@ def _resolve_service_token() -> str | None:
     return None
 
 
-async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
-    """GET the HR API with the server's service token; return parsed JSON.
-
-    Raises ToolError with a helpful message on missing/invalid auth or an upstream
-    error, so the model sees why a call failed instead of a raw stack.
-    """
+def _auth_header() -> dict[str, str]:
+    """Bearer header with the freshly-resolved service token, or a clean error."""
     token = _resolve_service_token()
     if not token:
         raise ToolError(
@@ -107,17 +110,16 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
             "generate one in the app UI (Settings → MCP → Generate API token), or "
             "set HRMCP_API_KEY / HRMCP_API_KEY_FILE for a remote host."
         )
+    return {"Authorization": f"Bearer {token}"}
 
-    clean = {k: v for k, v in (params or {}).items() if v is not None}
-    try:
-        resp = await _get_client().get(
-            path, params=clean, headers={"Authorization": f"Bearer {token}"}
-        )
-    except httpx.RequestError as exc:
-        raise ToolError(
-            f"Could not reach the HR API at {settings.hr_api_base_url}: {exc}"
-        ) from exc
 
+def _handle(resp: httpx.Response) -> Any:
+    """Map an HR API response to parsed JSON or a helpful ToolError.
+
+    Surfaces the app's own error body on 4xx (validation/conflict) so the model
+    can correct its input instead of guessing. A 204 (or empty body) — e.g. from
+    a lookup delete — returns a small success marker rather than failing to parse.
+    """
     if resp.status_code == 401:
         raise ToolError(
             "The HR API rejected the MCP server's token (401). Rotate it in the "
@@ -125,13 +127,65 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
         )
     if resp.status_code == 403:
         raise ToolError(
-            "The MCP server's token lacks the scope required for this data (403)."
+            "The MCP server's token lacks the scope required for this operation "
+            "(403). Write tools need the MCP key to hold employees:write / "
+            "lookups:write — rotate the key in the app UI (Settings → MCP) so it "
+            "picks up the current scopes."
         )
     if resp.status_code == 404:
         raise ToolError("Not found (404).")
     if resp.status_code >= 400:
-        raise ToolError(f"HR API error {resp.status_code}: {resp.text[:300]}")
+        # Includes 400/409/422 — pass the app's message through for correction.
+        raise ToolError(f"HR API error {resp.status_code}: {resp.text[:500]}")
+    if resp.status_code == 204 or not resp.content:
+        return {"ok": True, "status_code": resp.status_code}
     return resp.json()
+
+
+async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
+    """GET the HR API with the server's service token; return parsed JSON."""
+    clean = {k: v for k, v in (params or {}).items() if v is not None}
+    try:
+        resp = await _get_client().get(path, params=clean, headers=_auth_header())
+    except httpx.RequestError as exc:
+        raise ToolError(
+            f"Could not reach the HR API at {settings.hr_api_base_url}: {exc}"
+        ) from exc
+    return _handle(resp)
+
+
+async def _request(
+    method: str,
+    path: str,
+    *,
+    json_body: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> Any:
+    """Send a write request (POST/PATCH/DELETE) to the HR API and return JSON.
+
+    ``None`` values are dropped from ``json_body`` so optional/unset fields fall
+    back to the app's own defaults instead of overwriting with null. Pass an empty
+    dict to send a body of ``{}`` (e.g. terminate/reactivate with server defaults).
+    """
+    clean_params = {k: v for k, v in (params or {}).items() if v is not None}
+    clean_body = (
+        {k: v for k, v in json_body.items() if v is not None}
+        if json_body is not None
+        else None
+    )
+    try:
+        resp = await _get_client().request(
+            method,
+            path,
+            params=clean_params or None,
+            json=clean_body,
+            headers=_auth_header(),
+        )
+    except httpx.RequestError as exc:
+        raise ToolError(
+            f"Could not reach the HR API at {settings.hr_api_base_url}: {exc}"
+        ) from exc
+    return _handle(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +240,194 @@ async def get_employee(employee_id: int) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Employee write tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def create_employee(
+    employee_number: str,
+    first_name: str,
+    last_name: str,
+    country_id: int,
+    employment_status_id: int,
+    department_id: int,
+    job_title_id: int,
+    hire_date: str,
+    supervisor_id: int | None = None,
+    middle_name: str | None = None,
+    date_of_birth: str | None = None,
+    ssn: str | None = None,
+    address_line_1: str | None = None,
+    address_line_2: str | None = None,
+    city: str | None = None,
+    state_province_id: int | None = None,
+    postal_code: str | None = None,
+    home_phone: str | None = None,
+    personal_email: str | None = None,
+    work_email: str | None = None,
+    cost_center: str | None = None,
+    termination_date: str | None = None,
+    location_id: int | None = None,
+) -> Any:
+    """Create a new employee and return the created record.
+
+    Dates are ISO-8601 (`YYYY-MM-DD`). The `*_id` fields are foreign keys —
+    resolve them first with `list_lookups` (country/status/department/job_title/
+    location) and `list_employees` (supervisor). `job_title_id` must belong to
+    `department_id`, and `state_province_id` (if given) must belong to
+    `country_id`.
+
+    `supervisor_id` is required except when creating the very first employee on
+    an empty system. `ssn` may include separators (they're stripped to 9 digits)
+    and must be unique.
+    """
+    return await _request(
+        "POST",
+        "/api/v1/employees/",
+        json_body={
+            "employee_number": employee_number,
+            "first_name": first_name,
+            "last_name": last_name,
+            "country_id": country_id,
+            "employment_status_id": employment_status_id,
+            "department_id": department_id,
+            "job_title_id": job_title_id,
+            "hire_date": hire_date,
+            "supervisor_id": supervisor_id,
+            "middle_name": middle_name,
+            "date_of_birth": date_of_birth,
+            "ssn": ssn,
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
+            "city": city,
+            "state_province_id": state_province_id,
+            "postal_code": postal_code,
+            "home_phone": home_phone,
+            "personal_email": personal_email,
+            "work_email": work_email,
+            "cost_center": cost_center,
+            "termination_date": termination_date,
+            "location_id": location_id,
+        },
+    )
+
+
+@mcp.tool()
+async def update_employee(
+    employee_id: int,
+    employee_number: str | None = None,
+    first_name: str | None = None,
+    middle_name: str | None = None,
+    last_name: str | None = None,
+    date_of_birth: str | None = None,
+    ssn: str | None = None,
+    address_line_1: str | None = None,
+    address_line_2: str | None = None,
+    city: str | None = None,
+    country_id: int | None = None,
+    state_province_id: int | None = None,
+    postal_code: str | None = None,
+    home_phone: str | None = None,
+    personal_email: str | None = None,
+    work_email: str | None = None,
+    cost_center: str | None = None,
+    employment_status_id: int | None = None,
+    employment_status_value: int | None = None,
+    department_id: int | None = None,
+    job_title_id: int | None = None,
+    hire_date: str | None = None,
+    termination_date: str | None = None,
+    supervisor_id: int | None = None,
+    location_id: int | None = None,
+) -> Any:
+    """Partially update an employee (PATCH). Only the fields you pass are changed;
+    omitted fields are left as-is. Returns the updated record.
+
+    Status can be set by `employment_status_id` (DB primary key) OR
+    `employment_status_value` (stable IGA code: 1=Active, 0=Not Active,
+    3=Terminated) — supplying both is an error. To disable/terminate an employee
+    prefer the dedicated `archive_employee` / `terminate_employee` tools.
+    """
+    return await _request(
+        "PATCH",
+        f"/api/v1/employees/{employee_id}",
+        json_body={
+            "employee_number": employee_number,
+            "first_name": first_name,
+            "middle_name": middle_name,
+            "last_name": last_name,
+            "date_of_birth": date_of_birth,
+            "ssn": ssn,
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
+            "city": city,
+            "country_id": country_id,
+            "state_province_id": state_province_id,
+            "postal_code": postal_code,
+            "home_phone": home_phone,
+            "personal_email": personal_email,
+            "work_email": work_email,
+            "cost_center": cost_center,
+            "employment_status_id": employment_status_id,
+            "employment_status_value": employment_status_value,
+            "department_id": department_id,
+            "job_title_id": job_title_id,
+            "hire_date": hire_date,
+            "termination_date": termination_date,
+            "supervisor_id": supervisor_id,
+            "location_id": location_id,
+        },
+    )
+
+
+@mcp.tool()
+async def archive_employee(employee_id: int) -> Any:
+    """Soft-delete (disable) an employee: the record is kept but hidden from
+    default list views and supervisor pickers. Reversible with `restore_employee`.
+    Idempotent.
+    """
+    return await _request("POST", f"/api/v1/employees/{employee_id}/archive")
+
+
+@mcp.tool()
+async def restore_employee(employee_id: int) -> Any:
+    """Reverse `archive_employee`: un-hide a previously archived employee."""
+    return await _request("POST", f"/api/v1/employees/{employee_id}/restore")
+
+
+@mcp.tool()
+async def terminate_employee(
+    employee_id: int, termination_date: str | None = None
+) -> Any:
+    """Terminate an employee: atomically set status to Terminated and stamp the
+    termination date. `termination_date` is ISO-8601 (`YYYY-MM-DD`) and defaults
+    to today (UTC); it must be on or after the employee's hire_date. Idempotent;
+    refuses on archived employees (restore them first).
+    """
+    return await _request(
+        "POST",
+        f"/api/v1/employees/{employee_id}/terminate",
+        json_body={"termination_date": termination_date},
+    )
+
+
+@mcp.tool()
+async def reactivate_employee(
+    employee_id: int, employment_status_value: int | None = None
+) -> Any:
+    """Reverse a termination: set status back to active and clear the termination
+    date. `employment_status_value` defaults to 1 (Active). Idempotent; refuses on
+    archived employees.
+    """
+    return await _request(
+        "POST",
+        f"/api/v1/employees/{employee_id}/reactivate",
+        json_body={"employment_status_value": employment_status_value},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Lookup tools
 # ---------------------------------------------------------------------------
 
@@ -213,6 +455,55 @@ async def list_lookups(kind: str) -> Any:
             + ", ".join(sorted(_LOOKUP_PATHS))
         )
     return await _get(path)
+
+
+def _lookup_path(kind: str) -> str:
+    path = _LOOKUP_PATHS.get(kind)
+    if path is None:
+        raise ToolError(
+            f"Unknown lookup kind '{kind}'. Choose one of: "
+            + ", ".join(sorted(_LOOKUP_PATHS))
+        )
+    return path
+
+
+@mcp.tool()
+async def create_lookup(kind: str, fields: dict[str, Any]) -> Any:
+    """Create a lookup/reference record and return it.
+
+    `kind` is one of: countries, states, statuses, departments, job_titles,
+    locations. `fields` holds the record's values ([bracketed] ones are optional):
+
+    - countries: code (2-letter ISO), name, [is_active]
+    - states: country_id, name, [code], [is_active]
+    - statuses: label, value (int), [is_active_status]
+    - departments: name, [is_active]
+    - job_titles: department_id, name, [is_active]
+    - locations: name, [is_active]
+    """
+    return await _request("POST", _lookup_path(kind), json_body=fields)
+
+
+@mcp.tool()
+async def update_lookup(kind: str, lookup_id: int, fields: dict[str, Any]) -> Any:
+    """Partially update a lookup record (PATCH) by id; returns the updated record.
+
+    `kind` is one of: countries, states, statuses, departments, job_titles,
+    locations. `fields` holds only the values to change (same field names as
+    `create_lookup`).
+    """
+    return await _request(
+        "PATCH", f"{_lookup_path(kind)}{lookup_id}", json_body=fields
+    )
+
+
+@mcp.tool()
+async def delete_lookup(kind: str, lookup_id: int) -> Any:
+    """Delete a lookup record by id. `kind` is one of: countries, states,
+    statuses, departments, job_titles, locations. Fails if the record is still
+    referenced by employees or other records (the app returns a 409).
+    """
+    return await _request("DELETE", f"{_lookup_path(kind)}{lookup_id}")
 
 
 # ---------------------------------------------------------------------------

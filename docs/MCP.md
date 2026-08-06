@@ -1,15 +1,16 @@
 # MCP Server
 
 The app ships an optional **MCP (Model Context Protocol) server** that lets an AI
-assistant query HR data and run reports over a standard, tool-based interface. It
-runs as a **separate container** and speaks the **streamable-HTTP** transport.
+assistant query HR data, run reports, and manage employee and lookup records over
+a standard, tool-based interface. It runs as a **separate container** and speaks
+the **streamable-HTTP** transport.
 
 ## What it is
 
 The MCP server is a small, stateless **gateway** in front of the REST API. It
-exposes read-only tools; each one calls the app's REST API and returns the JSON.
-It holds no database of its own — it reaches the app over HTTP and reads its two
-credentials from files the app writes to the shared data volume.
+exposes read and write tools; each one calls the app's REST API and returns the
+JSON. It holds no database of its own — it reaches the app over HTTP and reads its
+two credentials from files the app writes to the shared data volume.
 
 ```
   MCP client (Claude, Saviynt, …)
@@ -29,7 +30,7 @@ data volume, so rotating either takes effect on its next call.
 
 | Credential | Direction | Purpose | Where it lives |
 |---|---|---|---|
-| **Outbound service token** | MCP server → app | The MCP server's own API key for calling the REST API. Granted only the read scopes its tools need. | An `ApiKey` row named "MCP Server", mirrored to `<data_dir>/mcp_api_key`. |
+| **Outbound service token** | MCP server → app | The MCP server's own API key for calling the REST API. Scoped to the read **and write** scopes its tools need (`employees:read/write`, `lookups:read/write`, `reports:read`) — and nothing more. | An `ApiKey` row named "MCP Server", mirrored to `<data_dir>/mcp_api_key`. |
 | **Inbound gateway tokens** | client → MCP server | Named, individually revocable bearer tokens that external clients present to reach the MCP server. | `mcp_gateway_tokens` table; active hashes synced to `<data_dir>/mcp_gateway_tokens.json`. |
 
 Why two? The MCP server authenticates **to** the app (outbound), and clients
@@ -42,7 +43,7 @@ request with 503** — so it's safe to deploy the container before configuring i
 
 ## Tools
 
-All tools are read-only.
+**Read** tools:
 
 | Tool | Calls |
 |---|---|
@@ -53,9 +54,35 @@ All tools are read-only.
 | `org_report` | `GET /api/v1/reports/org` |
 | `activity_report` | `GET /api/v1/reports/activity` |
 
-`list_lookups(kind=...)` accepts: `countries`, `states`, `statuses`,
-`departments`, `job_titles`, `locations`. The report tools are backed by the
-`/api/v1/reports/*` endpoints (see [API.md](API.md)).
+**Write** tools (added in v1.6.0 — every write is audited on the app side):
+
+| Tool | Calls | Scope |
+|---|---|---|
+| `create_employee` | `POST /api/v1/employees/` | `employees:write` |
+| `update_employee` | `PATCH /api/v1/employees/{id}` | `employees:write` |
+| `archive_employee` | `POST /api/v1/employees/{id}/archive` | `employees:write` |
+| `restore_employee` | `POST /api/v1/employees/{id}/restore` | `employees:write` |
+| `terminate_employee` | `POST /api/v1/employees/{id}/terminate` | `employees:write` |
+| `reactivate_employee` | `POST /api/v1/employees/{id}/reactivate` | `employees:write` |
+| `create_lookup` | `POST /api/v1/{lookup}/` | `lookups:write` |
+| `update_lookup` | `PATCH /api/v1/{lookup}/{id}` | `lookups:write` |
+| `delete_lookup` | `DELETE /api/v1/{lookup}/{id}` | `lookups:write` |
+
+`list_lookups(kind=...)` — and the `kind` argument of the `*_lookup` write tools —
+accept: `countries`, `states`, `statuses`, `departments`, `job_titles`,
+`locations`. The report tools are backed by the `/api/v1/reports/*` endpoints (see
+[API.md](API.md)).
+
+The write surface is intentionally bounded to **employees and lookups**. Console-
+user management, API-key/OAuth administration, and backup (which contains secret
+keys) are **not** exposed as MCP tools. Resolve `*_id` foreign keys with
+`list_lookups` / `list_employees` before creating or updating a record.
+
+> **Upgrading from ≤ v1.5.x?** The MCP key previously held read-only scopes. After
+> updating, **rotate the key** under Settings → MCP (**Generate API token**) so it
+> picks up `employees:write` / `lookups:write`; otherwise the write tools return
+> 403. Remote hosts using a static `HRMCP_API_KEY` must supply a key that carries
+> those scopes.
 
 `list_employees` excludes static reference managers (stand-in supervisor records
 like `margaretmanager`) by default; pass `include_reference_managers=true` to
@@ -78,9 +105,9 @@ the next step.
 In the app, go to **Settings → MCP**:
 
 1. **Generate the outbound API token** — click *Generate API token*. This mints
-   the MCP server's own key (scoped `employees:read` + `lookups:read` +
-   `reports:read`) and writes it to the data volume. The server picks it up on its
-   next call. Rotating revokes the old one immediately.
+   the MCP server's own key (scoped `employees:read/write` + `lookups:read/write`
+   + `reports:read`) and writes it to the data volume. The server picks it up on
+   its next call. Rotating revokes the old one immediately.
 2. **Generate an inbound gateway token** — under *Gateway tokens*, name one per
    consumer (e.g. "Saviynt prod") and click *+ Generate token*. Copy the
    `hrsotgw_...` value; it's shown only once. Create as many as you like and
@@ -165,9 +192,17 @@ own data volume, so its MCP server reads that project's tokens.
 
 - The MCP server holds no long-lived secret in its image; both credentials come
   from the volume (or env overrides) and are read per request.
-- Give the outbound key least privilege (it's scoped to the read tools by default).
+- The outbound key is scoped to exactly what the tools need — employee and lookup
+  read/write plus reports — and **excludes** console-user management, API-key/OAuth
+  administration, and backup. It cannot reach anything outside that surface.
 - Issue a separate inbound gateway token per consumer so you can revoke one
   without disrupting the others. Revoking is immediate (the synced file is
   rewritten and re-read on the next request).
-- It's a read-only surface: no tool creates, updates, or deletes data.
+- **This is a read/write surface**: the write tools create, update, archive,
+  terminate, and delete employee and lookup records (each change is audited on the
+  app side). Treat gateway tokens as write-capable credentials and issue them only
+  to trusted consumers. For a strictly read-only deployment, generate the MCP key
+  with only the `:read` scopes (create a custom API key limited to reads and point
+  the server at it via `HRMCP_API_KEY` / `HRMCP_API_KEY_FILE`); the write tools
+  then return 403.
 - Put it behind TLS (a reverse proxy) before exposing it beyond localhost.

@@ -41,11 +41,27 @@ def test_rotate_creates_scoped_key_and_file(admin_session: TestClient) -> None:
     assert token in admin_session.get("/ui/settings/mcp").text
     assert token not in admin_session.get("/ui/settings/mcp").text
 
-    # Least privilege: reads + reports work; user management does not.
+    # Scoped for the MCP tools: employee + lookup read AND write, plus reports.
     h = {"Authorization": f"Bearer {token}"}
     assert admin_session.get("/api/v1/reports/headcount", headers=h).status_code == 200
     assert admin_session.get("/api/v1/employees/", headers=h).status_code == 200
+    # lookups:write — creating a department succeeds.
+    assert (
+        admin_session.post(
+            "/api/v1/departments/", headers=h, json={"name": "MCP Scope Test Dept"}
+        ).status_code
+        == 201
+    )
+    # employees:write — reaching the handler (404 on a missing id), not blocked (403).
+    assert (
+        admin_session.post(
+            "/api/v1/employees/99999999/archive", headers=h
+        ).status_code
+        == 404
+    )
+    # Still bounded: no console-user management and no backup (which holds secrets).
     assert admin_session.get("/api/v1/users/", headers=h).status_code == 403
+    assert admin_session.post("/api/v1/backup", headers=h).status_code == 403
 
 
 def test_rotate_revokes_previous(admin_session: TestClient) -> None:

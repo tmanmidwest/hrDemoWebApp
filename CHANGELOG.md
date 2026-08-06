@@ -6,6 +6,39 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.6.0] — 2026-08-06
+
+### Added
+
+**MCP server can now manage employees and lookups (not just read)**
+- The MCP server gains **write tools** alongside the existing read/report tools,
+  so an AI assistant can drive the full employee lifecycle and manage reference
+  data through MCP:
+  - **Employees:** `create_employee`, `update_employee`, `archive_employee`
+    (disable), `restore_employee`, `terminate_employee`, `reactivate_employee`.
+  - **Lookups:** `create_lookup`, `update_lookup`, `delete_lookup` for
+    departments, job titles, locations, countries, states, and employment
+    statuses (`kind=` selects which).
+- Every write goes through the same REST API as the UI, so all existing
+  validation (FK checks, SSN uniqueness, supervisor rules, status transitions)
+  and **audit logging** apply unchanged. The tools drop unset optional fields so
+  omitted values fall back to server defaults instead of nulling columns, and
+  they surface the app's own 400/409/422 messages back to the caller for
+  correction.
+- The MCP service key's scopes were widened to match:
+  `employees:read/write`, `lookups:read/write`, `reports:read`. The write surface
+  is **intentionally bounded to employees and lookups** — console-user
+  management, API-key/OAuth administration, and backup (which contains secret
+  keys) are deliberately **not** exposed as MCP tools.
+- **Upgrade note:** an MCP key generated on ≤ 1.5.x holds read-only scopes.
+  After updating, **rotate the key** under Settings → MCP (*Generate API token*)
+  so it picks up the write scopes — otherwise the new tools return `403`. Remote
+  hosts using a static `HRMCP_API_KEY` must supply a key carrying those scopes.
+  For a strictly read-only deployment, point the server at a read-only API key
+  instead. **Rebuild the MCP image** to ship the new tools.
+- No schema change; existing data, API keys, and read-only integrations are
+  unaffected.
+
 ## [1.5.1] — 2026-08-06
 
 ### Fixed
