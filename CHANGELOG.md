@@ -6,6 +6,17 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.7.1] — 2026-08-07
+
+### Added
+
+**Exclude a department from the employees list**
+- The Department column filter gains an **is / is not** toggle. Choosing
+  "is not" + a department (e.g. *POC User*) hides that department from the list
+  while still showing everyone else — including employees with no department
+  assigned. The mode persists across sorting, paging, and the view tabs, and
+  counts as an active filter only when it's actually excluding.
+
 ## [1.7.0] — 2026-08-07
 
 ### Added

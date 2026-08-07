@@ -112,7 +112,15 @@
             <th>{{ filter_text("f_employee_number", filters.employee_number, "Filter…") }}</th>
             <th>{{ filter_text("f_name", filters.name, "Filter…") }}</th>
             <th>{{ filter_select("f_status", filters.status, filter_options.statuses) }}</th>
-            <th data-col="department">{{ filter_select("f_department", filters.department, filter_options.departments) }}</th>
+            <th data-col="department">
+              <div class="table__filter-compound">
+                <select name="f_department_mode" form="empfilter" class="table__filter-control table__filter-mode" aria-label="Department match mode" title="Match or exclude the selected department">
+                  <option value="is" {% if filters.department_mode != 'is_not' %}selected{% endif %}>is</option>
+                  <option value="is_not" {% if filters.department_mode == 'is_not' %}selected{% endif %}>is not</option>
+                </select>
+                {{ filter_select("f_department", filters.department, filter_options.departments) }}
+              </div>
+            </th>
             <th data-col="job_title">{{ filter_select("f_job_title", filters.job_title, filter_options.job_titles) }}</th>
             <th data-col="work_email">{{ filter_text("f_work_email", filters.work_email, "Filter…") }}</th>
             <th data-col="supervisor">{{ filter_select("f_supervisor", filters.supervisor, filter_options.supervisors) }}</th>

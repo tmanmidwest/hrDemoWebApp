@@ -119,6 +119,7 @@ _FILTER_PARAM_NAMES = {
     "name": "f_name",
     "status": "f_status",
     "department": "f_department",
+    "department_mode": "f_department_mode",
     "job_title": "f_job_title",
     "work_email": "f_work_email",
     "supervisor": "f_supervisor",
@@ -158,6 +159,9 @@ def list_employees(
     f_name: str = "",
     f_status: str = "",
     f_department: str = "",
+    # "is" (default) matches the chosen department; "is_not" excludes it (while
+    # still showing employees with no department).
+    f_department_mode: str = "is",
     f_job_title: str = "",
     f_work_email: str = "",
     f_supervisor: str = "",
@@ -222,7 +226,16 @@ def list_employees(
     if status_id is not None:
         query = query.filter(Employee.employment_status_id == status_id)
     if department_id is not None:
-        query = query.filter(Employee.department_id == department_id)
+        if f_department_mode == "is_not":
+            # Exclude the department, but keep employees with no department.
+            query = query.filter(
+                or_(
+                    Employee.department_id != department_id,
+                    Employee.department_id.is_(None),
+                )
+            )
+        else:
+            query = query.filter(Employee.department_id == department_id)
     if job_title_id is not None:
         query = query.filter(Employee.job_title_id == job_title_id)
     if supervisor_id is not None:
@@ -323,6 +336,10 @@ def list_employees(
         "hire_from": f_hire_from.strip(),
         "hire_to": f_hire_to.strip(),
     }
+    # Only record the exclude mode when it's actually excluding a department, so
+    # it counts as an active filter (and persists in links) only when meaningful.
+    if department_id is not None and f_department_mode == "is_not":
+        filters["department_mode"] = "is_not"
     has_filters = any(filters.values())
 
     # Pre-encoded query strings so the sort headers and view tabs preserve the
