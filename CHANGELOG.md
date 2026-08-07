@@ -8,6 +8,14 @@ backward-compatible — existing data and API keys keep working.
 
 ## [1.7.2] — 2026-08-07
 
+### Fixed
+
+- **Static assets are cache-busted.** The stylesheet and script are now linked
+  with a `?v=<mtime>` token, so a rebuilt image always serves fresh CSS/JS
+  instead of a browser-cached copy (which could render a page unstyled). Profile
+  page icons also carry explicit dimensions so they never balloon if styles are
+  slow to load.
+
 ### Added
 
 **Employee profile (read-only detail page)**
