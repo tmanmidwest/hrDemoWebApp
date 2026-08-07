@@ -405,16 +405,20 @@ components:
           - type: 'null'
           title: Date Of Birth
         department_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Department Id
-          type: integer
         employee_number:
           maxLength: 50
           minLength: 1
           title: Employee Number
           type: string
         employment_status_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Employment Status Id
-          type: integer
         first_name:
           maxLength: 100
           minLength: 1
@@ -433,8 +437,10 @@ components:
           - type: 'null'
           title: Home Phone
         job_title_id:
+          anyOf:
+          - type: integer
+          - type: 'null'
           title: Job Title Id
-          type: integer
         last_name:
           maxLength: 100
           minLength: 1
@@ -496,9 +502,6 @@ components:
       - first_name
       - last_name
       - country_id
-      - employment_status_id
-      - department_id
-      - job_title_id
       title: EmployeeCreate
       type: object
     EmployeeDepartmentRef:
@@ -586,12 +589,16 @@ components:
           - type: 'null'
           title: Date Of Birth
         department:
-          $ref: '#/components/schemas/EmployeeDepartmentRef'
+          anyOf:
+          - $ref: '#/components/schemas/EmployeeDepartmentRef'
+          - type: 'null'
         employee_number:
           title: Employee Number
           type: string
         employment_status:
-          $ref: '#/components/schemas/EmployeeStatusRef'
+          anyOf:
+          - $ref: '#/components/schemas/EmployeeStatusRef'
+          - type: 'null'
         first_name:
           title: First Name
           type: string
@@ -616,7 +623,9 @@ components:
           title: Is Reference Manager
           type: boolean
         job_title:
-          $ref: '#/components/schemas/EmployeeJobTitleRef'
+          anyOf:
+          - $ref: '#/components/schemas/EmployeeJobTitleRef'
+          - type: 'null'
         last_name:
           title: Last Name
           type: string
@@ -2494,6 +2503,36 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
           description: Validation Error
       summary: Create Employee
+      tags:
+      - employees
+  /api/v1/employees/schema:
+    get:
+      description: 'Live schema of the employee attribute surface for THIS instance.
+
+
+        Describes every attribute the employee API returns — core fields, nested
+
+        reference objects, and the instance''s actual `custom_fields` — plus
+
+        enumerations and a masked sample record. Intended for wiring up an external
+
+        connector (e.g. Saviynt) without guessing at instance-specific fields.
+
+
+        Declared before ``/{employee_id}`` so the literal path wins over the dynamic
+
+        integer segment.'
+      operationId: employee_schema_api_v1_employees_schema_get
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                title: Response Employee Schema Api V1 Employees Schema Get
+                type: object
+          description: Successful Response
+      summary: Employee Schema
       tags:
       - employees
   /api/v1/employees/{employee_id}:

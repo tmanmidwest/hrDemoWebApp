@@ -58,7 +58,7 @@ _HEADCOUNT_GROUPS: dict[str, dict[str, Any]] = {
         "model": Department,
         "fk": Employee.department_id,
         "label": Department.name,
-        "nullable": False,
+        "nullable": True,
     },
     "location": {
         "model": Location,
@@ -70,13 +70,13 @@ _HEADCOUNT_GROUPS: dict[str, dict[str, Any]] = {
         "model": EmploymentStatus,
         "fk": Employee.employment_status_id,
         "label": EmploymentStatus.label,
-        "nullable": False,
+        "nullable": True,
     },
     "job_title": {
         "model": JobTitle,
         "fk": Employee.job_title_id,
         "label": JobTitle.name,
-        "nullable": False,
+        "nullable": True,
     },
     "country": {
         "model": Country,

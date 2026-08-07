@@ -211,14 +211,15 @@ def test_create_employee_duplicate_number_returns_409(
     assert resp2.status_code == 409
 
 
-def test_create_employee_missing_supervisor_when_employees_exist(
+def test_create_employee_without_supervisor_is_allowed(
     api_client: TestClient, lookup_ids: dict[str, int]
 ) -> None:
-    """Seeded data has employees, so a new employee MUST have a supervisor."""
+    """Supervisor is optional — a new employee may be created without one even
+    when other employees already exist."""
     payload = _minimal_payload(lookup_ids, supervisor_id=None)
     resp = api_client.post("/api/v1/employees/", json=payload)
-    assert resp.status_code == 400
-    assert "supervisor_id" in resp.json()["detail"]
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["supervisor"] is None
 
 
 # ---------------------------------------------------------------------------

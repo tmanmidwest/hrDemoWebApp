@@ -115,6 +115,19 @@ def validate_location(db: Session, location_id: int) -> Location:
     return loc
 
 
+def validate_job_title(db: Session, job_title_id: int) -> JobTitle:
+    """Resolve and return the job title, or raise 400. Existence only.
+
+    Used when a job title is set without a department (both are optional); when a
+    department is also present, use
+    :func:`validate_job_title_belongs_to_department` for the stronger check.
+    """
+    title = db.get(JobTitle, job_title_id)
+    if title is None:
+        raise _bad_request(f"job_title_id {job_title_id} does not exist.")
+    return title
+
+
 def validate_job_title_belongs_to_department(
     db: Session, job_title_id: int, department_id: int
 ) -> JobTitle:

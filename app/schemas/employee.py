@@ -123,11 +123,11 @@ class EmployeeOut(BaseModel):
     personal_email: str | None
     work_email: str | None
 
-    # Employment
+    # Employment. Department, job title, and status are optional.
     cost_center: str | None
-    employment_status: EmployeeStatusRef
-    department: EmployeeDepartmentRef
-    job_title: EmployeeJobTitleRef
+    employment_status: EmployeeStatusRef | None
+    department: EmployeeDepartmentRef | None
+    job_title: EmployeeJobTitleRef | None
     location: EmployeeLocationRef | None
     hire_date: date | None
     termination_date: date | None
@@ -163,11 +163,12 @@ class EmployeeCreate(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(min_length=1, max_length=100)
     country_id: int
-    employment_status_id: int
-    department_id: int
-    job_title_id: int
 
-    # Optional
+    # Optional — department, job title, status, hire date, and supervisor may be
+    # filled in later.
+    employment_status_id: int | None = None
+    department_id: int | None = None
+    job_title_id: int | None = None
     hire_date: date | None = None
     middle_name: str | None = Field(default=None, max_length=100)
     date_of_birth: date | None = None

@@ -36,6 +36,7 @@ from app.services.employee_validation import (
     validate_department,
     validate_dob,
     validate_employment_status,
+    validate_job_title,
     validate_job_title_belongs_to_department,
     validate_location,
     validate_ssn_format,
@@ -184,7 +185,10 @@ def list_employees(
     # employees last." Achieve this by sorting on is_active_status DESC first,
     # then by the user-requested column.
     if not eligible_supervisor:  # Skip secondary sort if already filtered to active
-        query = query.join(Employee.employment_status, isouter=False).order_by(
+        # Outer join: status is optional, so an inner join here would drop
+        # employees without a status from the default listing. Unassigned status
+        # sorts last (NULL after active/inactive).
+        query = query.join(Employee.employment_status, isouter=True).order_by(
             desc(EmploymentStatus.is_active_status),
             order_fn(sort_col),
         )
@@ -192,6 +196,31 @@ def list_employees(
         query = query.order_by(order_fn(sort_col))
 
     return query.offset(offset).limit(limit).all()
+
+
+# ---------------------------------------------------------------------------
+# Connector schema (live)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/schema")
+def employee_schema(
+    db: Session = Depends(get_db),
+    _principal: Principal = Depends(require_scope("employees:read")),
+) -> dict[str, object]:
+    """Live schema of the employee attribute surface for THIS instance.
+
+    Describes every attribute the employee API returns — core fields, nested
+    reference objects, and the instance's actual `custom_fields` — plus
+    enumerations and a masked sample record. Intended for wiring up an external
+    connector (e.g. Saviynt) without guessing at instance-specific fields.
+
+    Declared before ``/{employee_id}`` so the literal path wins over the dynamic
+    integer segment.
+    """
+    from app.services.schema_export import build_schema
+
+    return build_schema(db)
 
 
 # ---------------------------------------------------------------------------
@@ -230,11 +259,18 @@ def create_employee(
         validate_state_belongs_to_country(
             db, body.state_province_id, body.country_id
         )
-    validate_employment_status(db, body.employment_status_id)
-    validate_department(db, body.department_id)
-    validate_job_title_belongs_to_department(
-        db, body.job_title_id, body.department_id
-    )
+    # Department, job title, and status are optional — validate only what's given.
+    if body.employment_status_id is not None:
+        validate_employment_status(db, body.employment_status_id)
+    if body.department_id is not None:
+        validate_department(db, body.department_id)
+    if body.job_title_id is not None:
+        if body.department_id is not None:
+            validate_job_title_belongs_to_department(
+                db, body.job_title_id, body.department_id
+            )
+        else:
+            validate_job_title(db, body.job_title_id)
     if body.location_id is not None:
         validate_location(db, body.location_id)
     if body.date_of_birth is not None:
@@ -244,18 +280,8 @@ def create_employee(
         validate_ssn_format(body.ssn)
         validate_ssn_unique(db, body.ssn)
 
-    # supervisor_id is required unless the employees table is empty
-    if body.supervisor_id is None:
-        any_existing = db.query(Employee.id).first()
-        if any_existing is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "supervisor_id is required (the only exception is the very "
-                    "first employee created on an empty employees table)."
-                ),
-            )
-    else:
+    # supervisor_id is optional; validate it only when provided.
+    if body.supervisor_id is not None:
         validate_supervisor(db, body.supervisor_id)
 
     payload = body.model_dump()
@@ -367,12 +393,18 @@ def update_employee(
     if "country_id" in data or "state_province_id" in data:
         if eff_state_id is not None:
             validate_state_belongs_to_country(db, eff_state_id, eff_country_id)
-    if "employment_status_id" in data:
+    if "employment_status_id" in data and eff_status_id is not None:
         validate_employment_status(db, eff_status_id)
-    if "department_id" in data:
+    if "department_id" in data and eff_dept_id is not None:
         validate_department(db, eff_dept_id)
-    if "department_id" in data or "job_title_id" in data:
-        validate_job_title_belongs_to_department(db, eff_title_id, eff_dept_id)
+    # Re-check the title/department pairing when either changed. Both are
+    # optional now, so only enforce belonging when both are present; a title on
+    # its own just has to exist.
+    if ("department_id" in data or "job_title_id" in data) and eff_title_id is not None:
+        if eff_dept_id is not None:
+            validate_job_title_belongs_to_department(db, eff_title_id, eff_dept_id)
+        else:
+            validate_job_title(db, eff_title_id)
     if "location_id" in data and eff_location_id is not None:
         validate_location(db, eff_location_id)
     if "supervisor_id" in data and data["supervisor_id"] is not None:

@@ -32,6 +32,21 @@ backward-compatible — existing data and API keys keep working.
     custom fields, resolves in-file supervisors, and records per-row plus
     summary events in the Activity log. Re-running the same file is idempotent.
 
+**Connector schema export — live attribute catalog for external connectors**
+- A new admin **Connector Schema** page (`/ui/admin/schema`) and API endpoint
+  (`GET /api/v1/employees/schema`, scope `employees:read`) describe the employee
+  attribute surface **as it exists in this instance** — so a Saviynt (or other)
+  connector can be mapped without guessing at instance-specific fields.
+- Covers every attribute the employee API returns: core fields, nested
+  reference objects (`department.name`, `employment_status.value`,
+  `supervisor.employee_number`, …), and — crucially — the instance's **live
+  custom fields** (`custom_fields.<key>`), which the static OpenAPI spec can't
+  enumerate. Each entry carries type, nullability, a description, and a live
+  example value pulled from real data (SSN always masked).
+- Also includes enumerations (employment status `value`/`label` pairs) and a
+  masked sample record for end-to-end mapping tests. Downloadable as **JSON**
+  (rich) or **CSV** (flat attribute catalog); both actions are audited.
+
 **Custom fields — admin-defined employee attributes**
 - Employees gain a `custom_fields` JSON bag described by a new
   `custom_field_definitions` registry (key, label, type, order, export flag).
@@ -41,6 +56,15 @@ backward-compatible — existing data and API keys keep working.
 
 ### Changed
 
+- **Adding an employee now requires only number, name, and country.**
+  `department`, `job title`, `employment status`, `hire date`, and `supervisor`
+  are all optional and can be filled in later — the columns are nullable and the
+  API/UI/MCP no longer require them. (The old "a new employee must have a
+  supervisor unless the table is empty" rule is gone.) When a value *is* given it
+  is still validated (e.g. a job title, when paired with a department, must
+  belong to it). Employee lists use outer joins so records missing these fields
+  still appear, headcount reports show an "Unassigned" bucket, and the employee
+  API returns `null` for the nested objects.
 - `employees.hire_date` is now **nullable** — bulk imports and source systems
   that don't carry a hire date no longer force a placeholder. The API, import,
   and UI validation were relaxed to match.

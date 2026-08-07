@@ -250,10 +250,10 @@ async def create_employee(
     first_name: str,
     last_name: str,
     country_id: int,
-    employment_status_id: int,
-    department_id: int,
-    job_title_id: int,
-    hire_date: str,
+    employment_status_id: int | None = None,
+    department_id: int | None = None,
+    job_title_id: int | None = None,
+    hire_date: str | None = None,
     supervisor_id: int | None = None,
     middle_name: str | None = None,
     date_of_birth: str | None = None,
@@ -274,13 +274,15 @@ async def create_employee(
 
     Dates are ISO-8601 (`YYYY-MM-DD`). The `*_id` fields are foreign keys —
     resolve them first with `list_lookups` (country/status/department/job_title/
-    location) and `list_employees` (supervisor). `job_title_id` must belong to
-    `department_id`, and `state_province_id` (if given) must belong to
-    `country_id`.
+    location) and `list_employees` (supervisor). When both are given,
+    `job_title_id` must belong to `department_id`; `state_province_id` (if given)
+    must belong to `country_id`.
 
-    `supervisor_id` is required except when creating the very first employee on
-    an empty system. `ssn` may include separators (they're stripped to 9 digits)
-    and must be unique.
+    Only `employee_number`, `first_name`, `last_name`, and `country_id` are
+    required. `employment_status_id`, `department_id`, `job_title_id`,
+    `hire_date`, and `supervisor_id` are optional and may be filled in later.
+    `ssn` may include separators (they're stripped to 9 digits) and must be
+    unique.
     """
     return await _request(
         "POST",

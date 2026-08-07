@@ -157,9 +157,9 @@
     <h2 class="text-sm" style="margin: 0 0 var(--s-5) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Employment</h2>
     <div class="form-grid form-grid--2col">
       <div>
-        <label class="label" for="employment_status_id">Employment Status<span class="label__required">*</span></label>
-        <select class="select" id="employment_status_id" name="employment_status_id" required>
-          <option value="">— Select —</option>
+        <label class="label" for="employment_status_id">Employment Status</label>
+        <select class="select" id="employment_status_id" name="employment_status_id">
+          <option value="">— None —</option>
           {% for s in statuses %}
           <option value="{{ s.id }}" {% if form.employment_status_id == s.id %}selected{% endif %}>{{ s.label }}</option>
           {% endfor %}
@@ -171,8 +171,8 @@
                value="{{ form.cost_center or '' }}" maxlength="100" />
       </div>
       <div>
-        <label class="label" for="department_id">Department<span class="label__required">*</span></label>
-        <select class="select" id="department_id" name="department_id" required
+        <label class="label" for="department_id">Department</label>
+        <select class="select" id="department_id" name="department_id"
                 hx-get="/ui/employees/_job-title-options"
                 hx-target="#job_title_id"
                 hx-swap="innerHTML"
@@ -184,12 +184,12 @@
         </select>
       </div>
       <div>
-        <label class="label" for="job_title_id">Job Title<span class="label__required">*</span></label>
-        <select class="select" id="job_title_id" name="job_title_id" required>
+        <label class="label" for="job_title_id">Job Title</label>
+        <select class="select" id="job_title_id" name="job_title_id">
           {% if not form.department_id %}
             <option value="">— Select a department first —</option>
           {% else %}
-            <option value="">— Select —</option>
+            <option value="">— None —</option>
             {% for t in job_titles %}
             <option value="{{ t.id }}" {% if form.job_title_id == t.id %}selected{% endif %}>{{ t.name }}</option>
             {% endfor %}
@@ -206,9 +206,9 @@
         </select>
       </div>
       <div>
-        <label class="label" for="hire_date">Hire Date<span class="label__required">*</span></label>
+        <label class="label" for="hire_date">Hire Date</label>
         <input class="input" type="date" id="hire_date" name="hire_date"
-               value="{{ form.hire_date or '' }}" required autocomplete="off" />
+               value="{{ form.hire_date or '' }}" autocomplete="off" />
       </div>
       <div>
         <label class="label" for="termination_date">Termination Date</label>
@@ -220,7 +220,7 @@
           Supervisor{% if must_have_supervisor %}<span class="label__required">*</span>{% endif %}
         </label>
         <select class="select" id="supervisor_id" name="supervisor_id" {% if must_have_supervisor %}required{% endif %}>
-          {% if not must_have_supervisor %}<option value="">— None (first employee) —</option>{% else %}<option value="">— Select —</option>{% endif %}
+          <option value="">— None —</option>
           {% for s in eligible_supervisors %}
           <option value="{{ s.id }}" {% if form.supervisor_id == s.id %}selected{% endif %}>
             {{ s.first_name }} {{ s.last_name }} ({{ s.employee_number }})

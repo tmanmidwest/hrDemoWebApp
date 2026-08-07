@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set page_title = "Connector Schema" %}
+{% block breadcrumb %}<span>Admin</span> <span class="topbar__breadcrumb-sep">/</span> <span>Connector Schema</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Connector schema</h1>
+    <p class="page-header__subtitle">
+      Every attribute the employee API exposes for <strong>this</strong> instance —
+      including its live custom fields — for wiring up a Saviynt (or other) connector.
+    </p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/admin/schema/export.csv" class="btn btn--secondary">Download CSV</a>
+    <a href="/ui/admin/schema/export.json" class="btn btn--primary">Download JSON</a>
+  </div>
+</div>
+
+<div class="di-stats" style="grid-template-columns: repeat(4, 1fr); max-width: 720px;">
+  <div class="di-stat"><span class="di-stat__v">{{ schema.attributes | length }}</span><span class="di-stat__k">Attributes</span></div>
+  <div class="di-stat"><span class="di-stat__v">{{ schema.custom_fields | length }}</span><span class="di-stat__k">Custom fields</span></div>
+  <div class="di-stat"><span class="di-stat__v">{{ schema.enumerations.employment_status | length }}</span><span class="di-stat__k">Statuses</span></div>
+  <div class="di-stat"><span class="di-stat__v">{{ schema.instance.employee_count }}</span><span class="di-stat__k">Employees</span></div>
+</div>
+
+<div class="callout" style="max-width: 900px; margin-bottom: var(--s-5);">
+  <span class="ic">→</span>
+  <div>
+    Also available programmatically at <span class="mono">GET /api/v1/employees/schema</span>
+    (scope <span class="mono">employees:read</span>). Attribute paths are relative to an item in the
+    <span class="mono">/api/v1/employees</span> response.
+  </div>
+</div>
+
+<div class="card card--flush">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Attribute path</th>
+          <th>Type</th>
+          <th>Nullable</th>
+          <th>Group</th>
+          <th>Example</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in schema.attributes %}
+        <tr>
+          <td class="mono">{{ a.path }}</td>
+          <td class="mono text-xs">{{ a.type }}</td>
+          <td>{% if a.nullable %}<span class="text-faint">yes</span>{% else %}<span class="badge badge--neutral">required</span>{% endif %}</td>
+          <td>
+            {% if a.group == 'custom' %}<span class="badge badge--success">custom</span>
+            {% else %}<span class="text-faint text-xs">{{ a.group }}</span>{% endif %}
+          </td>
+          <td class="mono text-xs text-muted">{{ a.example | truncate(32) if a.example else "—" }}</td>
+          <td class="text-xs text-muted">{{ a.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if schema.enumerations.employment_status %}
+<h2 class="text-sm" style="margin: var(--s-6) 0 var(--s-3); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Employment status values</h2>
+<div class="di-chips">
+  {% for s in schema.enumerations.employment_status %}
+  <span class="di-chip"><b>{{ s.value }}</b> = {{ s.label }}{% if s.is_active_status %} <span class="text-faint">(active)</span>{% endif %}</span>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

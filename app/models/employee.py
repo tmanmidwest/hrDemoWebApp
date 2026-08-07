@@ -79,16 +79,18 @@ class Employee(Base, TimestampMixin):
     personal_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     work_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # Employment
+    # Employment. Department, job title, and status are optional so a record can
+    # be added with only the essentials (number, name, country) and enriched
+    # later. Only country_id remains required.
     cost_center: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    employment_status_id: Mapped[int] = mapped_column(
-        ForeignKey("employment_statuses.id"), nullable=False, index=True
+    employment_status_id: Mapped[int | None] = mapped_column(
+        ForeignKey("employment_statuses.id"), nullable=True, index=True
     )
-    department_id: Mapped[int] = mapped_column(
-        ForeignKey("departments.id"), nullable=False
+    department_id: Mapped[int | None] = mapped_column(
+        ForeignKey("departments.id"), nullable=True
     )
-    job_title_id: Mapped[int] = mapped_column(
-        ForeignKey("job_titles.id"), nullable=False
+    job_title_id: Mapped[int | None] = mapped_column(
+        ForeignKey("job_titles.id"), nullable=True
     )
     # Optional — location is available but not required.
     location_id: Mapped[int | None] = mapped_column(
@@ -135,11 +137,11 @@ class Employee(Base, TimestampMixin):
     state_province: Mapped[StateProvince | None] = relationship(
         "StateProvince", lazy="joined"
     )
-    employment_status: Mapped[EmploymentStatus] = relationship(
+    employment_status: Mapped[EmploymentStatus | None] = relationship(
         "EmploymentStatus", lazy="joined"
     )
-    department: Mapped[Department] = relationship("Department", lazy="joined")
-    job_title: Mapped[JobTitle] = relationship("JobTitle", lazy="joined")
+    department: Mapped[Department | None] = relationship("Department", lazy="joined")
+    job_title: Mapped[JobTitle | None] = relationship("JobTitle", lazy="joined")
     location: Mapped[Location | None] = relationship("Location", lazy="joined")
 
     # Self-referential — the supervisor is another Employee.

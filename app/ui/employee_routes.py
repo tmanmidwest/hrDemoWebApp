@@ -31,6 +31,7 @@ from app.services.employee_validation import (
     validate_dob,
     validate_employee_number_unique,
     validate_employment_status,
+    validate_job_title,
     validate_job_title_belongs_to_department,
     validate_location,
     validate_ssn_format,
@@ -171,11 +172,13 @@ def list_employees(
     # aliased join distinct from the eager-loaded `supervisor` relationship.
     supervisor_alias = aliased(Employee)
 
+    # Outer joins for status/department/job title — they're optional now, and an
+    # inner join would silently drop employees that don't have one yet.
     query = (
         db.query(Employee)
-        .join(Employee.employment_status)
-        .join(Employee.department)
-        .join(Employee.job_title)
+        .outerjoin(Employee.employment_status)
+        .outerjoin(Employee.department)
+        .outerjoin(Employee.job_title)
         .join(Employee.country)
         .outerjoin(Location, Employee.location_id == Location.id)
         .outerjoin(supervisor_alias, Employee.supervisor_id == supervisor_alias.id)
@@ -485,7 +488,7 @@ def show_new_form(
         employee=None,
         form={},  # empty form
         form_action="/ui/employees/new",
-        must_have_supervisor=not _no_eligible_supervisors(db),
+        must_have_supervisor=False,
         reference_managers_enabled=reference_managers.is_enabled(db),
         **dropdowns,
     )
@@ -554,7 +557,7 @@ def show_edit_form(
         employee=employee,
         form=form_data,
         form_action=f"/ui/employees/{employee.id}/edit",
-        must_have_supervisor=employee.supervisor_id is not None,  # Bootstrap rows (e.g., the first employee) legitimately have no supervisor; preserve that.
+        must_have_supervisor=False,  # Supervisor is optional.
         reference_managers_enabled=reference_managers.is_enabled(db),
         custom_fields_view=_custom_fields_view(db, employee),
         **dropdowns,
@@ -746,7 +749,8 @@ async def create_employee(
     user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     data = await _parse_employee_form(request)
-    must_have_supervisor = not _no_eligible_supervisors(db)
+    # Supervisor, department, job title, status, and hire date are all optional.
+    must_have_supervisor = False
 
     try:
         if data["country_id"] is None:
@@ -756,25 +760,25 @@ async def create_employee(
             validate_state_belongs_to_country(
                 db, data["state_province_id"], data["country_id"]  # type: ignore[arg-type]
             )
-        if data["employment_status_id"] is None:
-            raise ValueError("Employment status is required.")
-        validate_employment_status(db, data["employment_status_id"])  # type: ignore[arg-type]
-        if data["department_id"] is None:
-            raise ValueError("Department is required.")
-        validate_department(db, data["department_id"])  # type: ignore[arg-type]
-        if data["job_title_id"] is None:
-            raise ValueError("Job title is required.")
-        validate_job_title_belongs_to_department(
-            db, data["job_title_id"], data["department_id"]  # type: ignore[arg-type]
-        )
+        if data["employment_status_id"] is not None:
+            validate_employment_status(db, data["employment_status_id"])  # type: ignore[arg-type]
+        if data["department_id"] is not None:
+            validate_department(db, data["department_id"])  # type: ignore[arg-type]
+        if data["job_title_id"] is not None:
+            if data["department_id"] is not None:
+                validate_job_title_belongs_to_department(
+                    db, data["job_title_id"], data["department_id"]  # type: ignore[arg-type]
+                )
+            else:
+                validate_job_title(db, data["job_title_id"])  # type: ignore[arg-type]
         if data["location_id"] is not None:
             validate_location(db, data["location_id"])  # type: ignore[arg-type]
-        if data["hire_date"] is None:
-            raise ValueError("Hire date is required.")
-        if data["termination_date"] is not None and data["termination_date"] < data["hire_date"]:  # type: ignore[operator]
+        if (
+            data["termination_date"] is not None
+            and data["hire_date"] is not None
+            and data["termination_date"] < data["hire_date"]  # type: ignore[operator]
+        ):
             raise ValueError("Termination date must be on or after hire date.")
-        if must_have_supervisor and data["supervisor_id"] is None:
-            raise ValueError("Supervisor is required.")
         if data["supervisor_id"] is not None:
             validate_supervisor(db, data["supervisor_id"])  # type: ignore[arg-type]
         if data["date_of_birth"] is not None:
@@ -867,10 +871,8 @@ async def update_employee(
 
     data = await _parse_employee_form(request)
 
-    # An employee that legitimately has no supervisor today (e.g., the bootstrap
-    # first employee) can keep saving with no supervisor. Once they have one,
-    # they must keep one.
-    must_have_supervisor = employee.supervisor_id is not None
+    # Supervisor, department, job title, status, and hire date are all optional.
+    must_have_supervisor = False
 
     try:
         if data["country_id"] is None:
@@ -880,17 +882,25 @@ async def update_employee(
             validate_state_belongs_to_country(
                 db, data["state_province_id"], data["country_id"]  # type: ignore[arg-type]
             )
-        validate_employment_status(db, data["employment_status_id"])  # type: ignore[arg-type]
-        validate_department(db, data["department_id"])  # type: ignore[arg-type]
-        validate_job_title_belongs_to_department(
-            db, data["job_title_id"], data["department_id"]  # type: ignore[arg-type]
-        )
+        if data["employment_status_id"] is not None:
+            validate_employment_status(db, data["employment_status_id"])  # type: ignore[arg-type]
+        if data["department_id"] is not None:
+            validate_department(db, data["department_id"])  # type: ignore[arg-type]
+        if data["job_title_id"] is not None:
+            if data["department_id"] is not None:
+                validate_job_title_belongs_to_department(
+                    db, data["job_title_id"], data["department_id"]  # type: ignore[arg-type]
+                )
+            else:
+                validate_job_title(db, data["job_title_id"])  # type: ignore[arg-type]
         if data["location_id"] is not None:
             validate_location(db, data["location_id"])  # type: ignore[arg-type]
-        if data["termination_date"] is not None and data["termination_date"] < data["hire_date"]:  # type: ignore[operator]
+        if (
+            data["termination_date"] is not None
+            and data["hire_date"] is not None
+            and data["termination_date"] < data["hire_date"]  # type: ignore[operator]
+        ):
             raise ValueError("Termination date must be on or after hire date.")
-        if must_have_supervisor and data["supervisor_id"] is None:
-            raise ValueError("Supervisor is required.")
         if data["supervisor_id"] is not None:
             validate_supervisor(
                 db, data["supervisor_id"], excluding_employee_id=employee_id  # type: ignore[arg-type]

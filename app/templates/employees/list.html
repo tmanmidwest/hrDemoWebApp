@@ -157,8 +157,8 @@
               {% if e.is_reference_manager %}<span class="badge badge--warning text-xs" title="Static reference manager — assignable as a supervisor but hidden from the API/MCP roster, CSV export, and reports.">Static</span>{% endif %}
             </td>
             <td>{{ M.status_badge(e.employment_status) }}</td>
-            <td data-col="department">{{ e.department.name }}</td>
-            <td data-col="job_title">{{ e.job_title.name }}</td>
+            <td data-col="department">{{ e.department.name if e.department else "—" }}</td>
+            <td data-col="job_title">{{ e.job_title.name if e.job_title else "—" }}</td>
             <td data-col="work_email" class="text-muted">{{ e.work_email or "—" }}</td>
             <td data-col="supervisor">
               {% if e.supervisor %}
@@ -167,7 +167,7 @@
                 <span class="text-faint">—</span>
               {% endif %}
             </td>
-            <td data-col="hire_date" class="mono text-muted">{{ e.hire_date.isoformat() }}</td>
+            <td data-col="hire_date" class="mono text-muted">{{ e.hire_date.isoformat() if e.hire_date else "—" }}</td>
             <td data-col="country" class="text-muted">{{ e.country.name }}</td>
             <td data-col="location" class="text-muted">{{ e.location.name if e.location else "—" }}</td>
             {% if current_user.can_manage_employees %}
