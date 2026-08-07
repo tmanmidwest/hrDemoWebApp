@@ -251,18 +251,31 @@
     </div>
     {% endif %}
 
-    {% if custom_fields_view %}
-    <hr style="border: none; border-top: 1px solid var(--line); margin: var(--s-6) 0;" />
+    {% if custom_field_inputs %}
+    <hr class="divider" />
     <h2 class="text-sm" style="margin: 0 0 var(--s-2) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Custom attributes</h2>
     <p class="form-hint" style="margin: 0 0 var(--s-4);">
-      Imported attributes, exposed to the API under <span class="mono">custom_fields</span>. Managed via
+      Exposed to the API under <span class="mono">custom_fields</span>. Field definitions are managed via
       <a href="/ui/admin/import">Data Import</a>.
     </p>
-    <div class="di-custom-grid">
-      {% for cf in custom_fields_view %}
-      <div class="di-custom-item">
-        <span class="di-custom-item__k">{{ cf.label }}</span>
-        <span class="di-custom-item__v">{{ cf.value }}</span>
+    <div class="form-grid form-grid--2col">
+      {% for cf in custom_field_inputs %}
+      <div>
+        <label class="label" for="cf_{{ cf.key }}">{{ cf.label }}</label>
+        {% if cf.data_type == 'boolean' %}
+        <select class="select" id="cf_{{ cf.key }}" name="cf_{{ cf.key }}">
+          <option value="">—</option>
+          <option value="true" {% if cf.value == 'true' %}selected{% endif %}>Yes</option>
+          <option value="false" {% if cf.value == 'false' %}selected{% endif %}>No</option>
+        </select>
+        {% elif cf.data_type == 'number' %}
+        <input class="input" type="number" step="any" id="cf_{{ cf.key }}" name="cf_{{ cf.key }}" value="{{ cf.value }}" />
+        {% elif cf.data_type == 'date' %}
+        <input class="input" type="date" id="cf_{{ cf.key }}" name="cf_{{ cf.key }}" value="{{ cf.value }}" autocomplete="off" />
+        {% else %}
+        <input class="input" type="text" id="cf_{{ cf.key }}" name="cf_{{ cf.key }}" value="{{ cf.value }}" maxlength="500" />
+        {% endif %}
+        {% if cf.description %}<div class="form-hint">{{ cf.description }}</div>{% endif %}
       </div>
       {% endfor %}
     </div>

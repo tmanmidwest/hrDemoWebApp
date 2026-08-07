@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% import "_macros.html" as M %}
+{% set page_title = employee.full_name %}
+
+{% block breadcrumb %}
+<span><a href="/ui/employees">Employees</a></span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ employee.full_name }}</span>
+{% endblock %}
+
+{% macro item(label, value) %}
+<div class="detail-item">
+  <span class="detail-item__k">{{ label }}</span>
+  <span class="detail-item__v">{{ value if (value is not none and value != "") else "—" }}</span>
+</div>
+{% endmacro %}
+
+{% macro section(title) %}
+<h2 class="text-sm detail-section__title">{{ title }}</h2>
+{% endmacro %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{{ employee.full_name }}</h1>
+    <p class="page-header__subtitle">
+      <span class="mono">{{ employee.employee_number }}</span>
+      &nbsp;·&nbsp; {{ M.status_badge(employee.employment_status) }}
+      {% if employee.is_archived %}<span class="badge badge--neutral text-xs">Archived</span>{% endif %}
+      {% if employee.is_reference_manager %}<span class="badge badge--warning text-xs">Static</span>{% endif %}
+    </p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/employees" class="btn btn--secondary">Back</a>
+    {% if current_user.can_manage_employees %}
+    <a href="/ui/employees/{{ employee.id }}/edit" class="btn btn--primary">Edit</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="max-width: 920px;">
+  <div class="card__body">
+
+    {{ section("Identity") }}
+    <div class="detail-grid">
+      {{ item("Employee #", employee.employee_number) }}
+      {{ item("First name", employee.first_name) }}
+      {{ item("Middle name", employee.middle_name) }}
+      {{ item("Last name", employee.last_name) }}
+      {{ item("Date of birth", employee.date_of_birth.isoformat() if employee.date_of_birth else None) }}
+      {{ item("SSN", employee.ssn_masked) }}
+    </div>
+
+    <hr class="divider" />
+    {{ section("Address") }}
+    <div class="detail-grid">
+      {{ item("Address line 1", employee.address_line_1) }}
+      {{ item("Address line 2", employee.address_line_2) }}
+      {{ item("City", employee.city) }}
+      {{ item("State / Province", employee.state_province.name if employee.state_province else None) }}
+      {{ item("Postal code", employee.postal_code) }}
+      {{ item("Country", employee.country.name if employee.country else None) }}
+    </div>
+
+    <hr class="divider" />
+    {{ section("Contact") }}
+    <div class="detail-grid">
+      {{ item("Home phone", employee.home_phone) }}
+      {{ item("Personal email", employee.personal_email) }}
+      {{ item("Work email", employee.work_email) }}
+    </div>
+
+    <hr class="divider" />
+    {{ section("Employment") }}
+    <div class="detail-grid">
+      {{ item("Employment status", employee.employment_status.label if employee.employment_status else None) }}
+      {{ item("Cost center", employee.cost_center) }}
+      {{ item("Department", employee.department.name if employee.department else None) }}
+      {{ item("Job title", employee.job_title.name if employee.job_title else None) }}
+      {{ item("Location", employee.location.name if employee.location else None) }}
+      {{ item("Hire date", employee.hire_date.isoformat() if employee.hire_date else None) }}
+      {{ item("Termination date", employee.termination_date.isoformat() if employee.termination_date else None) }}
+      {{ item("Supervisor", (employee.supervisor.full_name ~ " (" ~ employee.supervisor.employee_number ~ ")") if employee.supervisor else None) }}
+    </div>
+
+    {% if custom_fields_view %}
+    <hr class="divider" />
+    {{ section("Custom attributes") }}
+    <div class="detail-grid">
+      {% for cf in custom_fields_view %}
+      {{ item(cf.label, cf.value) }}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <hr class="divider" />
+    {{ section("Record") }}
+    <div class="detail-grid">
+      {{ item("Created", employee.created_at.strftime("%Y-%m-%d %H:%M UTC") if employee.created_at else None) }}
+      {{ item("Updated", employee.updated_at.strftime("%Y-%m-%d %H:%M UTC") if employee.updated_at else None) }}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

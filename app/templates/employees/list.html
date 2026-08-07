@@ -160,7 +160,11 @@
           <tr class="{% if e.is_archived %}is-archived{% endif %}">
             <td class="mono">{{ e.employee_number }}</td>
             <td>
+              {% if current_user.can_manage_employees %}
+              <div><a href="/ui/employees/{{ e.id }}" class="table__link">{{ e.first_name }} {{ e.last_name }}</a></div>
+              {% else %}
               <div>{{ e.first_name }} {{ e.last_name }}</div>
+              {% endif %}
               {% if e.is_archived %}<span class="badge badge--neutral text-xs">Archived</span>{% endif %}
               {% if e.is_reference_manager %}<span class="badge badge--warning text-xs" title="Static reference manager — assignable as a supervisor but hidden from the API/MCP roster, CSV export, and reports.">Static</span>{% endif %}
             </td>

@@ -507,6 +507,7 @@ def show_new_form(
         form_action="/ui/employees/new",
         must_have_supervisor=False,
         reference_managers_enabled=reference_managers.is_enabled(db),
+        custom_field_inputs=_custom_field_inputs(db),
         **dropdowns,
     )
 
@@ -576,16 +577,16 @@ def show_edit_form(
         form_action=f"/ui/employees/{employee.id}/edit",
         must_have_supervisor=False,  # Supervisor is optional.
         reference_managers_enabled=reference_managers.is_enabled(db),
-        custom_fields_view=_custom_fields_view(db, employee),
+        custom_field_inputs=_custom_field_inputs(db, employee=employee),
         **dropdowns,
     )
 
 
 def _custom_fields_view(db: Session, employee: Employee) -> list[dict[str, str]]:
-    """Read-only [{label, value}] of an employee's custom attributes for display.
+    """Read-only [{label, value}] of an employee's custom attributes.
 
-    Ordered by the registry; only defined, non-empty values are shown. Values are
-    written/updated through the Data Import wizard, so this is display-only here.
+    Ordered by the registry; only defined, non-empty values are shown. Used on the
+    read-only detail page.
     """
     from app.services import custom_fields as cf
 
@@ -600,6 +601,75 @@ def _custom_fields_view(db: Session, employee: Employee) -> list[dict[str, str]]
                 }
             )
     return out
+
+
+def _custom_field_inputs(
+    db: Session,
+    *,
+    employee: Employee | None = None,
+    submitted: object | None = None,
+) -> list[dict[str, str]]:
+    """Editable custom-field descriptors for the create/edit form.
+
+    Each item is {key, label, data_type, description, value}. ``value`` is a
+    string suitable for the control: booleans render as ""/"true"/"false".
+    Source of the value: the re-submitted form (on validation error), else the
+    existing employee (edit), else blank (new).
+    """
+    from app.services import custom_fields as cf
+
+    stored = (employee.custom_fields or {}) if employee is not None else {}
+    inputs: list[dict[str, str]] = []
+    for d in cf.list_definitions(db, active_only=True):
+        if submitted is not None:
+            value = str(submitted.get(f"cf_{d.key}") or "")  # type: ignore[union-attr]
+        else:
+            v = stored.get(d.key)
+            if d.data_type == "boolean":
+                value = "true" if v is True else ("false" if v is False else "")
+            else:
+                value = "" if v is None else str(v)
+        inputs.append(
+            {
+                "key": d.key,
+                "label": d.label,
+                "data_type": d.data_type,
+                "description": d.description or "",
+                "value": value,
+            }
+        )
+    return inputs
+
+
+def _apply_custom_fields(
+    db: Session, form: object, employee: Employee | None
+) -> tuple[dict[str, object], list[str]]:
+    """Merge submitted ``cf_<key>`` inputs into a custom_fields bag.
+
+    Starts from the employee's existing bag (edit) or empty (create). For each
+    active definition present in the form, a blank clears the value and a
+    non-blank is coerced to the field's type. Values for inactive definitions are
+    left untouched. Returns (merged_bag, errors).
+    """
+    from app.services import custom_fields as cf
+
+    merged: dict[str, object] = dict(
+        employee.custom_fields or {}
+    ) if employee is not None else {}
+    errors: list[str] = []
+    for d in cf.list_definitions(db, active_only=True):
+        fname = f"cf_{d.key}"
+        if fname not in form:  # type: ignore[operator]
+            continue
+        raw = str(form.get(fname) or "").strip()  # type: ignore[union-attr]
+        if raw == "":
+            merged.pop(d.key, None)
+        else:
+            try:
+                merged[d.key] = cf.coerce_value(d.data_type, raw)
+            except cf.CustomFieldError as exc:
+                errors.append(f"{d.label}: {exc}")
+    return merged, errors
 
 
 # ---------------------------------------------------------------------------
@@ -647,6 +717,34 @@ def job_title_options(
             .all()
         )
     return render(request, "employees/_job_title_options.html", job_titles=titles)
+
+
+# ---------------------------------------------------------------------------
+# Read-only detail view
+# ---------------------------------------------------------------------------
+# NOTE: declared AFTER the static GET routes (/new, /_states-options,
+# /_job-title-options) so this single-segment dynamic path doesn't shadow them.
+
+
+@router.get("/{employee_id}")
+def show_employee(
+    employee_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(require_employee_manager),
+) -> Response:
+    """Read-only employee detail page. Managers/admins only; has an Edit button."""
+    employee = db.get(Employee, employee_id)
+    if employee is None:
+        raise HTTPException(status_code=404, detail="Employee not found.")
+    return render(
+        request,
+        "employees/detail.html",
+        current_user=user,
+        active_section="employees",
+        employee=employee,
+        custom_fields_view=_custom_fields_view(db, employee),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -724,6 +822,7 @@ def _render_form_with_error(
     form_data: dict[str, object],
     error_msg: str,
     must_have_supervisor: bool,
+    custom_field_inputs: list[dict[str, str]] | None = None,
 ) -> Response:
     dropdowns = _form_dropdown_data(
         db,
@@ -750,6 +849,9 @@ def _render_form_with_error(
         error=error_msg,
         must_have_supervisor=must_have_supervisor,
         reference_managers_enabled=reference_managers.is_enabled(db),
+        custom_field_inputs=custom_field_inputs
+        if custom_field_inputs is not None
+        else _custom_field_inputs(db, employee=employee),
         **dropdowns,
     )
 
@@ -766,8 +868,15 @@ async def create_employee(
     user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     data = await _parse_employee_form(request)
+    form = await request.form()  # cached; used for cf_<key> custom-field inputs
     # Supervisor, department, job title, status, and hire date are all optional.
     must_have_supervisor = False
+
+    def _error(msg: str) -> Response:
+        return _render_form_with_error(
+            request, user, db, None, data, msg, must_have_supervisor,
+            custom_field_inputs=_custom_field_inputs(db, submitted=form),
+        )
 
     try:
         if data["country_id"] is None:
@@ -809,9 +918,13 @@ async def create_employee(
         validate_employee_number_unique(db, data["employee_number"])  # type: ignore[arg-type]
     except (HTTPException, ValueError) as exc:
         msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        return _render_form_with_error(
-            request, user, db, None, data, msg, must_have_supervisor
-        )
+        return _error(msg)
+
+    # Custom attributes (cf_<key> inputs), coerced/validated against the registry.
+    custom_values, cf_errors = _apply_custom_fields(db, form, None)
+    if cf_errors:
+        return _error("; ".join(cf_errors))
+    data["custom_fields"] = custom_values
 
     # Marking a record as a static reference manager is only honored when the
     # feature is enabled for this instance; otherwise it stays a normal employee.
@@ -826,28 +939,10 @@ async def create_employee(
         db.rollback()
         msg = str(exc.orig).lower()
         if "ssn" in msg:
-            return _render_form_with_error(
-                request,
-                user,
-                db,
-                None,
-                data,
-                "An employee with this Social Security Number already exists.",
-                must_have_supervisor,
-            )
+            return _error("An employee with this Social Security Number already exists.")
         if "employee_number" in msg or "unique" in msg:
-            return _render_form_with_error(
-                request,
-                user,
-                db,
-                None,
-                data,
-                f"Employee number '{data['employee_number']}' already exists.",
-                must_have_supervisor,
-            )
-        return _render_form_with_error(
-            request, user, db, None, data, f"Database error: {exc.orig}", must_have_supervisor
-        )
+            return _error(f"Employee number '{data['employee_number']}' already exists.")
+        return _error(f"Database error: {exc.orig}")
 
     log.info(
         "ui_employee_created",
@@ -887,9 +982,16 @@ async def update_employee(
         raise HTTPException(status_code=404, detail="Employee not found.")
 
     data = await _parse_employee_form(request)
+    form = await request.form()  # cached; used for cf_<key> custom-field inputs
 
     # Supervisor, department, job title, status, and hire date are all optional.
     must_have_supervisor = False
+
+    def _error(msg: str) -> Response:
+        return _render_form_with_error(
+            request, user, db, employee, data, msg, must_have_supervisor,
+            custom_field_inputs=_custom_field_inputs(db, submitted=form),
+        )
 
     try:
         if data["country_id"] is None:
@@ -938,7 +1040,12 @@ async def update_employee(
             )
     except (HTTPException, ValueError) as exc:
         msg = exc.detail if isinstance(exc, HTTPException) else str(exc)
-        return _render_form_with_error(request, user, db, employee, data, msg, must_have_supervisor)
+        return _error(msg)
+
+    # Custom attributes: merge cf_<key> inputs into the existing bag.
+    merged_custom, cf_errors = _apply_custom_fields(db, form, employee)
+    if cf_errors:
+        return _error("; ".join(cf_errors))
 
     # Preserve the existing SSN when the field was left blank on edit.
     if data["ssn"] is None:
@@ -951,34 +1058,17 @@ async def update_employee(
 
     for field, value in data.items():
         setattr(employee, field, value)
+    employee.custom_fields = merged_custom
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         msg = str(exc.orig).lower()
         if "ssn" in msg:
-            return _render_form_with_error(
-                request,
-                user,
-                db,
-                employee,
-                data,
-                "An employee with this Social Security Number already exists.",
-                must_have_supervisor,
-            )
+            return _error("An employee with this Social Security Number already exists.")
         if "employee_number" in msg or "unique" in msg:
-            return _render_form_with_error(
-                request,
-                user,
-                db,
-                employee,
-                data,
-                "That employee number is in use by another employee.",
-                must_have_supervisor,
-            )
-        return _render_form_with_error(
-            request, user, db, employee, data, f"Database error: {exc.orig}", must_have_supervisor
-        )
+            return _error("That employee number is in use by another employee.")
+        return _error(f"Database error: {exc.orig}")
 
     log.info("ui_employee_updated", extra={"employee_id": employee.id, "by": user.username})
     record_event(

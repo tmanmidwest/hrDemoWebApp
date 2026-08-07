@@ -1352,3 +1352,15 @@ code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
 /* Department filter with an is / is-not mode toggle stacked above the dropdown */
 .table__filter-compound { display: flex; flex-direction: column; gap: 4px; }
 .table__filter-mode { font-size: 0.75rem; padding-top: 2px; padding-bottom: 2px; }
+
+/* Read-only employee detail page */
+.detail-section__title { margin: 0 0 var(--s-3) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-4) var(--s-5); }
+.detail-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.detail-item__k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
+.detail-item__v { font-weight: 500; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr; } }
+
+/* Clickable employee name in the roster */
+.table__link { color: var(--primary); text-decoration: none; font-weight: 500; }
+.table__link:hover { text-decoration: underline; }

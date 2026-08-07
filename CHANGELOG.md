@@ -6,6 +6,25 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.7.2] — 2026-08-07
+
+### Added
+
+**Read-only employee detail page**
+- Employee names in the roster are now links to a **view-only detail page**
+  (`/ui/employees/{id}`) showing every field — identity, address, contact,
+  employment, and custom attributes — with an **Edit** button to jump to the
+  form. Managers/admins only, matching the edit page.
+
+### Changed
+
+**Custom attributes are now editable on the employee form**
+- The custom fields (e.g. imported `worker_type`, `company`) that previously
+  showed as a read-only block on the edit page are now **real, typed inputs**
+  (text / number / date / yes-no dropdown) on both the create and edit forms.
+  Values are coerced and validated against the field registry; a blank clears
+  the attribute. They're also editable when creating a new employee.
+
 ## [1.7.1] — 2026-08-07
 
 ### Added
