@@ -1353,12 +1353,72 @@ code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
 .table__filter-compound { display: flex; flex-direction: column; gap: 4px; }
 .table__filter-mode { font-size: 0.75rem; padding-top: 2px; padding-bottom: 2px; }
 
-/* Read-only employee detail page */
-.detail-section__title { margin: 0 0 var(--s-3) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+/* ==========================================================================
+   Employee profile (read-only detail page)
+   ========================================================================== */
+.profile { max-width: 1000px; display: flex; flex-direction: column; gap: var(--s-5); }
+
+/* Detail label/value primitives (also used inside panels) */
 .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-4) var(--s-5); }
 .detail-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .detail-item__k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
 .detail-item__v { font-weight: 500; overflow-wrap: anywhere; }
+.detail-link { color: var(--primary); text-decoration: none; }
+.detail-link:hover { text-decoration: underline; }
+
+/* Hero */
+.profile-hero { position: relative; overflow: hidden; padding: 0; }
+.profile-hero__band {
+  height: 84px;
+  background:
+    linear-gradient(120deg,
+      hsl(var(--hue) 62% 50% / 0.20),
+      hsl(calc(var(--hue) + 40) 62% 50% / 0.06));
+}
+.profile-hero__actions { position: absolute; top: var(--s-4); right: var(--s-4); display: flex; gap: var(--s-2); }
+.profile-hero__body { display: flex; align-items: flex-end; gap: var(--s-4); padding: 0 var(--s-6) var(--s-5); margin-top: -34px; }
+.profile-avatar {
+  flex: 0 0 auto;
+  width: 72px; height: 72px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 1.5rem; font-weight: 650; letter-spacing: -0.01em; color: #fff;
+  background: linear-gradient(140deg, hsl(var(--hue) 55% 52%), hsl(calc(var(--hue) + 25) 55% 42%));
+  border: 3px solid var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.profile-hero__main { padding-bottom: 2px; min-width: 0; }
+.profile-hero__name { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; margin: 0; line-height: 1.15; }
+.profile-hero__sub { color: var(--text-muted); font-size: 0.95rem; margin-top: 2px; }
+.profile-dot { color: var(--text-faint); margin: 0 4px; }
+.profile-hero__badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+
+/* Quick facts strip */
+.profile-facts {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s-4);
+  padding: var(--s-4) var(--s-6); border-top: 1px solid var(--line); background: var(--surface-2);
+}
+.profile-fact { display: flex; align-items: flex-start; gap: var(--s-3); min-width: 0; }
+.profile-fact > svg { width: 18px; height: 18px; color: var(--primary); flex: 0 0 auto; margin-top: 2px; }
+.profile-fact > div { display: flex; flex-direction: column; min-width: 0; }
+.profile-fact__k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-faint); }
+.profile-fact__v { font-weight: 500; overflow-wrap: anywhere; }
+.profile-fact__note { color: var(--text-faint); font-weight: 400; }
+
+/* Panels */
+.profile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-5); align-items: start; }
+.panel { padding: var(--s-5) var(--s-5) var(--s-5); }
+.panel--wide { grid-column: 1 / -1; }
+.panel__head { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-4); }
+.panel__head > svg { width: 16px; height: 16px; color: var(--primary); }
+.panel__head h2 { font-size: 0.95rem; font-weight: 600; margin: 0; }
+.panel__hint { margin-left: auto; font-size: 0.72rem; color: var(--text-faint); }
+
+.profile-meta { text-align: center; font-size: 0.75rem; color: var(--text-faint); }
+
+@media (max-width: 720px) {
+  .profile-facts { grid-template-columns: repeat(2, 1fr); }
+  .profile-grid { grid-template-columns: 1fr; }
+}
 @media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr; } }
 
 /* Clickable employee name in the roster */

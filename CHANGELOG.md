@@ -10,11 +10,13 @@ backward-compatible — existing data and API keys keep working.
 
 ### Added
 
-**Read-only employee detail page**
-- Employee names in the roster are now links to a **view-only detail page**
-  (`/ui/employees/{id}`) showing every field — identity, address, contact,
-  employment, and custom attributes — with an **Edit** button to jump to the
-  form. Managers/admins only, matching the edit page.
+**Employee profile (read-only detail page)**
+- Employee names in the roster now link to a **profile page**
+  (`/ui/employees/{id}`): an identity header with an avatar, a per-person tinted
+  banner, a status pill, and a quick-facts strip (location, supervisor, hire date
+  with tenure, work email), followed by panelled sections — Contact, Personal,
+  Address, Employment, and Custom attributes. The supervisor and emails are
+  links. An **Edit** button jumps to the form. Managers/admins only.
 
 ### Changed
 

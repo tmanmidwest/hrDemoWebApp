@@ -744,7 +744,37 @@ def show_employee(
         active_section="employees",
         employee=employee,
         custom_fields_view=_custom_fields_view(db, employee),
+        profile=_profile_extras(employee),
     )
+
+
+def _profile_extras(employee: Employee) -> dict[str, object]:
+    """Presentational bits for the profile header: initials, avatar hue, tenure."""
+    first = (employee.first_name or "").strip()
+    last = (employee.last_name or "").strip()
+    initials = (first[:1] + last[:1]).upper() or (employee.employee_number or "?")[:2].upper()
+    name = f"{first} {last}".strip()
+    # Stable per-person hue (0–359) so each avatar/banner has its own tint.
+    hue = (sum(ord(c) for c in name) % 360) if name else 210
+
+    tenure: str | None = None
+    if employee.hire_date is not None:
+        end = employee.termination_date or date.today()
+        months = (end.year - employee.hire_date.year) * 12 + (
+            end.month - employee.hire_date.month
+        )
+        if end.day < employee.hire_date.day:
+            months -= 1
+        months = max(months, 0)
+        years, rem = divmod(months, 12)
+        if years and rem:
+            tenure = f"{years} yr {rem} mo"
+        elif years:
+            tenure = f"{years} yr"
+        else:
+            tenure = f"{rem} mo"
+
+    return {"initials": initials, "hue": hue, "tenure": tenure}
 
 
 # ---------------------------------------------------------------------------
