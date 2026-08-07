@@ -1,0 +1,19 @@
+{# Wizard progress rail. Expects `step` (1-5) in context. #}
+{% set steps = [
+  (1, "Upload", "Choose a file"),
+  (2, "Map columns", "Source → fields"),
+  (3, "Resolve", "Lookups & values"),
+  (4, "Preview", "Review changes"),
+  (5, "Import", "Commit & done"),
+] %}
+<ol class="di-stepper" aria-label="Import progress">
+  {% for n, title, sub in steps %}
+  <li class="di-stepper__item {% if n == step %}is-active{% elif n < step %}is-done{% endif %}">
+    <span class="di-stepper__num">{% if n < step %}✓{% else %}{{ n }}{% endif %}</span>
+    <span class="di-stepper__text">
+      <span class="di-stepper__title">{{ title }}</span>
+      <span class="di-stepper__sub">{{ sub }}</span>
+    </span>
+  </li>
+  {% endfor %}
+</ol>

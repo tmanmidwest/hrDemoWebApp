@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% set page_title = "Data Import · Done" %}
+{% block breadcrumb %}<span><a href="/ui/admin/import">Data Import</a></span> <span class="topbar__breadcrumb-sep">/</span> <span>Done</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Import complete</h1>
+    <p class="page-header__subtitle">
+      Loaded from <span class="mono">{{ batch.filename }}</span>. Every action was recorded in the Activity log.
+    </p>
+  </div>
+</div>
+
+{% include "data_import/_stepper.html" %}
+
+{% set lk = result.get("lookups", {}) %}
+<div class="card di-done">
+  <div class="card__body">
+    <div class="di-done__check">✓</div>
+    <ul class="di-done__list">
+      <li><b>{{ result.get("created", 0) }}</b> employees created{% if result.get("updated", 0) %}, <b>{{ result.get("updated") }}</b> updated{% endif %}.</li>
+      {% set total_lk = (lk.get("departments",0) + lk.get("job_titles",0) + lk.get("locations",0) + lk.get("states",0)) %}
+      {% if total_lk %}
+      <li><b>{{ total_lk }}</b> lookups created — {{ lk.get("departments",0) }} departments, {{ lk.get("job_titles",0) }} job titles, {{ lk.get("locations",0) }} locations, {{ lk.get("states",0) }} states.</li>
+      {% endif %}
+      {% if lk.get("custom_fields", 0) %}
+      <li><b>{{ lk.get("custom_fields") }}</b> custom fields created and populated — now returned by the employee API.</li>
+      {% endif %}
+      {% if profile %}
+      <li>Profile <b>“{{ profile.name }}”</b> saved — re-import a refreshed file in one click.</li>
+      {% endif %}
+    </ul>
+    <div class="di-actions" style="border:0;padding-top:var(--s-4);">
+      <a href="/ui/employees" class="btn btn--primary">Go to Employees</a>
+      <a href="/ui/admin/import" class="btn btn--secondary">Import another file</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

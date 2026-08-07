@@ -579,6 +579,11 @@
             "title": "Country Id",
             "type": "integer"
           },
+          "custom_fields": {
+            "additionalProperties": true,
+            "title": "Custom Fields",
+            "type": "object"
+          },
           "date_of_birth": {
             "anyOf": [
               {
@@ -612,9 +617,16 @@
             "type": "string"
           },
           "hire_date": {
-            "format": "date",
-            "title": "Hire Date",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hire Date"
           },
           "home_phone": {
             "anyOf": [
@@ -751,8 +763,7 @@
           "country_id",
           "employment_status_id",
           "department_id",
-          "job_title_id",
-          "hire_date"
+          "job_title_id"
         ],
         "title": "EmployeeCreate",
         "type": "object"
@@ -878,6 +889,11 @@
             "title": "Created At",
             "type": "string"
           },
+          "custom_fields": {
+            "additionalProperties": true,
+            "title": "Custom Fields",
+            "type": "object"
+          },
           "date_of_birth": {
             "anyOf": [
               {
@@ -905,9 +921,16 @@
             "type": "string"
           },
           "hire_date": {
-            "format": "date",
-            "title": "Hire Date",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hire Date"
           },
           "home_phone": {
             "anyOf": [
@@ -1229,6 +1252,18 @@
               }
             ],
             "title": "Country Id"
+          },
+          "custom_fields": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Fields"
           },
           "date_of_birth": {
             "anyOf": [
@@ -2583,7 +2618,7 @@
   "info": {
     "description": "Lightweight HR Source of Truth for Saviynt Identity Cloud POC and integration testing.",
     "title": "Demo HR Source of Truth App",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "openapi": "3.1.0",
   "paths": {

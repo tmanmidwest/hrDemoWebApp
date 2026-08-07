@@ -6,6 +6,46 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; all changes below are
 backward-compatible — existing data and API keys keep working.
 
+## [1.7.0] — 2026-08-07
+
+### Added
+
+**Data Import wizard — self-service, in-app bulk import for any customer file**
+- A new admin-only **Data Import** section (`/ui/admin/import`) walks an operator
+  through a five-step wizard — **Upload → Map columns → Resolve → Preview →
+  Import** — to load an arbitrary customer HR extract without pre-converting it.
+  - **Upload:** accepts Excel (`.xlsx`) and CSV directly (adds an `openpyxl`
+    dependency to read Excel natively).
+  - **Map columns:** each source column is auto-matched to a standard field, a
+    custom attribute, the "split Last, First" name transform, or ignored — all
+    editable in the browser. The mapping can be **saved as a reusable profile**
+    per customer and re-applied to a refreshed file in one click.
+  - **Resolve:** translate source codes to system values (e.g.
+    `USA → United States`, `A → Active`) and, with the **auto-create missing
+    lookups** toggle, create the departments, job titles, locations, and
+    states/provinces the file needs but the system doesn't have yet. State codes
+    match seeded ISO-3166-2 values by suffix (`AL` ↔ `US-AL`) so seeded states
+    are reused rather than duplicated.
+  - **Preview:** a dry-run New / Update / Error classification per row — nothing
+    is written until confirmed.
+  - **Import:** upserts by `employee_number`, creates the planned lookups and
+    custom fields, resolves in-file supervisors, and records per-row plus
+    summary events in the Activity log. Re-running the same file is idempotent.
+
+**Custom fields — admin-defined employee attributes**
+- Employees gain a `custom_fields` JSON bag described by a new
+  `custom_field_definitions` registry (key, label, type, order, export flag).
+  Custom attributes are **surfaced in the employee API** under `custom_fields`
+  (so downstream systems like Saviynt get every attribute in one call), shown
+  read-only on the employee edit page, and populated by the import wizard.
+
+### Changed
+
+- `employees.hire_date` is now **nullable** — bulk imports and source systems
+  that don't carry a hire date no longer force a placeholder. The API, import,
+  and UI validation were relaxed to match.
+- The employee CSV template/import no longer requires `hire_date`.
+
 ## [1.6.0] — 2026-08-06
 
 ### Added

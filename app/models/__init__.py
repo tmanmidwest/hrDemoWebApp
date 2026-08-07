@@ -11,9 +11,11 @@ from app.models.app_user import AppUser, UserRole
 from app.models.audit_event import AuditEvent
 from app.models.auth_provider import AuthProvider
 from app.models.country import Country
+from app.models.custom_field import CustomFieldDefinition
 from app.models.department import Department
 from app.models.employee import Employee
 from app.models.employment_status import EmploymentStatus
+from app.models.import_batch import ImportBatch, ImportProfile
 from app.models.job_title import JobTitle
 from app.models.location import Location
 from app.models.mcp_gateway_token import McpGatewayToken
@@ -29,9 +31,12 @@ __all__ = [
     "AuditEvent",
     "AuthProvider",
     "Country",
+    "CustomFieldDefinition",
     "Department",
     "Employee",
     "EmploymentStatus",
+    "ImportBatch",
+    "ImportProfile",
     "JobTitle",
     "Location",
     "McpGatewayToken",

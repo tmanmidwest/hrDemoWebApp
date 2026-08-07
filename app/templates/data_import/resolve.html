@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% set page_title = "Data Import · Resolve" %}
+{% block breadcrumb %}<span><a href="/ui/admin/import">Data Import</a></span> <span class="topbar__breadcrumb-sep">/</span> <span>Resolve</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Resolve values &amp; lookups</h1>
+    <p class="page-header__subtitle">
+      Translate source codes to system values, and create anything the file needs
+      that doesn't exist yet.
+    </p>
+  </div>
+</div>
+
+{% include "data_import/_stepper.html" %}
+
+<form method="post" action="/ui/admin/import/{{ batch.id }}/resolve">
+  <div class="di-grid">
+    <div class="di-col">
+
+      {# ---- value mapping ---- #}
+      {% if plan.value_groups %}
+      <div class="card">
+        <div class="card__header"><h2 class="card__title">Value mapping</h2></div>
+        <div class="card__body">
+          <p class="text-muted mb-6">Translate source codes to the matching system value.</p>
+          {% for g in plan.value_groups %}
+          <div class="di-vmgroup">
+            <div class="di-vmgroup__label">{{ g.source_column }} → {{ g.target_label }}</div>
+            {% for e in g.entries %}
+            <div class="di-vmrow">
+              <span class="di-vmrow__from mono">{{ e.value }}</span>
+              <span class="di-vmrow__arrow">→</span>
+              <input type="hidden" name="vm_src" value="{{ g.source_column }}" />
+              <input type="hidden" name="vm_val" value="{{ e.value }}" />
+              <input class="input di-vmrow__to" type="text" name="vm_mapped" value="{{ e.mapped }}" />
+              {% if e.resolved %}
+                <span class="badge badge--success">matches</span>
+              {% else %}
+                <span class="badge badge--warning">no match</span>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# ---- new lookups ---- #}
+      <div class="card">
+        <div class="card__header flex" style="justify-content:space-between;align-items:center;">
+          <h2 class="card__title">Lookups to create</h2>
+          <span class="badge badge--neutral">{{ plan.new_lookup_total }} new</span>
+        </div>
+        <div class="card__body">
+          <label class="di-toggle">
+            <input type="checkbox" name="auto_create_lookups" value="1" {% if auto_create %}checked{% endif %} />
+            <span>
+              <strong>Auto-create missing lookups</strong>
+              <span class="form-hint" style="margin:0;">Create departments, job titles, locations and states found in the file but not yet in the system.</span>
+            </span>
+          </label>
+
+          {% if plan.new_lookups %}
+          <div class="di-lookups">
+            {% for lg in plan.new_lookups %}
+            <div class="di-lookup">
+              <div class="di-lookup__head">
+                <strong>{{ lg.label }}</strong>
+                <span class="badge badge--success">{{ lg.count }}</span>
+              </div>
+              <div class="di-lookup__samples text-faint text-xs">{{ lg.samples | join(", ") }}{% if lg.count > lg.samples|length %}, …{% endif %}</div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-faint text-xs" style="margin-top:var(--s-3);">Everything the file references already exists.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    {# ---- custom fields ---- #}
+    <aside class="di-col">
+      <div class="card">
+        <div class="card__header"><h2 class="card__title">Custom fields</h2></div>
+        <div class="card__body">
+          <p class="text-muted mb-6">Attributes exposed to the API &amp; your connector under <span class="mono">custom_fields</span>.</p>
+          {% if plan.custom_fields %}
+          <div class="di-chips">
+            {% for cf in plan.custom_fields %}
+            <span class="di-chip">
+              <b>{{ cf.key }}</b> · {{ cf.data_type }}
+              {% if cf.exists %}<span class="text-faint">(exists)</span>{% else %}<span class="badge badge--success">new</span>{% endif %}
+            </span>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-faint text-xs">No columns mapped to custom fields.</p>
+          {% endif %}
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="di-actions">
+    <a href="/ui/admin/import/{{ batch.id }}/map" class="btn btn--secondary">← Back</a>
+    <div class="flex-spacer"></div>
+    <button type="submit" class="btn btn--primary">Next: Preview →</button>
+  </div>
+</form>
+{% endblock %}

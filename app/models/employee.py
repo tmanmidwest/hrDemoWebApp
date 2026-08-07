@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from typing import Any
+
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -91,12 +94,20 @@ class Employee(Base, TimestampMixin):
     location_id: Mapped[int | None] = mapped_column(
         ForeignKey("locations.id"), nullable=True, index=True
     )
-    hire_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # Nullable: some source systems (and bulk imports) don't carry a hire date.
+    hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     termination_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Supervisor — self-referential FK
     supervisor_id: Mapped[int | None] = mapped_column(
         ForeignKey("employees.id"), nullable=True, index=True
+    )
+
+    # Admin-defined custom attributes, keyed by CustomFieldDefinition.key. The
+    # registry (custom_field_definitions) describes the shape; this bag holds the
+    # values. Surfaced in the API under `custom_fields` for downstream systems.
+    custom_fields: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
     )
 
     # Soft-delete

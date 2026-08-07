@@ -556,8 +556,30 @@ def show_edit_form(
         form_action=f"/ui/employees/{employee.id}/edit",
         must_have_supervisor=employee.supervisor_id is not None,  # Bootstrap rows (e.g., the first employee) legitimately have no supervisor; preserve that.
         reference_managers_enabled=reference_managers.is_enabled(db),
+        custom_fields_view=_custom_fields_view(db, employee),
         **dropdowns,
     )
+
+
+def _custom_fields_view(db: Session, employee: Employee) -> list[dict[str, str]]:
+    """Read-only [{label, value}] of an employee's custom attributes for display.
+
+    Ordered by the registry; only defined, non-empty values are shown. Values are
+    written/updated through the Data Import wizard, so this is display-only here.
+    """
+    from app.services import custom_fields as cf
+
+    values = employee.custom_fields or {}
+    out: list[dict[str, str]] = []
+    for definition in cf.list_definitions(db, active_only=True):
+        if definition.key in values:
+            out.append(
+                {
+                    "label": definition.label,
+                    "value": cf.display_value(definition.data_type, values[definition.key]),
+                }
+            )
+    return out
 
 
 # ---------------------------------------------------------------------------

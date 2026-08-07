@@ -251,6 +251,23 @@
     </div>
     {% endif %}
 
+    {% if custom_fields_view %}
+    <hr style="border: none; border-top: 1px solid var(--line); margin: var(--s-6) 0;" />
+    <h2 class="text-sm" style="margin: 0 0 var(--s-2) 0; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Custom attributes</h2>
+    <p class="form-hint" style="margin: 0 0 var(--s-4);">
+      Imported attributes, exposed to the API under <span class="mono">custom_fields</span>. Managed via
+      <a href="/ui/admin/import">Data Import</a>.
+    </p>
+    <div class="di-custom-grid">
+      {% for cf in custom_fields_view %}
+      <div class="di-custom-item">
+        <span class="di-custom-item__k">{{ cf.label }}</span>
+        <span class="di-custom-item__v">{{ cf.value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
   </div>
 
   <div class="form-actions" style="padding: var(--s-5) var(--s-6);">

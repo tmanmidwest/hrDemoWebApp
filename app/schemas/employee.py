@@ -7,6 +7,7 @@ systems get all the data they need in one call. Writes accept only FK IDs.
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -128,9 +129,14 @@ class EmployeeOut(BaseModel):
     department: EmployeeDepartmentRef
     job_title: EmployeeJobTitleRef
     location: EmployeeLocationRef | None
-    hire_date: date
+    hire_date: date | None
     termination_date: date | None
     supervisor: EmployeeSupervisorRef | None
+
+    # Admin-defined custom attributes (see CustomFieldDefinition). Keyed by the
+    # field's stable slug. Present so downstream systems (e.g. Saviynt) get every
+    # attribute in one call.
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
     # Static reference manager: a stand-in supervisor record that is hidden from
     # the roster list, CSV export, and reports, but still assignable and
@@ -160,9 +166,9 @@ class EmployeeCreate(BaseModel):
     employment_status_id: int
     department_id: int
     job_title_id: int
-    hire_date: date
 
     # Optional
+    hire_date: date | None = None
     middle_name: str | None = Field(default=None, max_length=100)
     date_of_birth: date | None = None
     ssn: str | None = Field(
@@ -181,6 +187,9 @@ class EmployeeCreate(BaseModel):
     termination_date: date | None = None
     supervisor_id: int | None = None  # Required only if other employees exist
     location_id: int | None = None  # Optional — location is not required
+    # Admin-defined custom attributes, keyed by CustomFieldDefinition.key. Values
+    # are coerced/validated against the registry in the route.
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("ssn")
     @classmethod
@@ -189,7 +198,11 @@ class EmployeeCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_dates(self) -> EmployeeCreate:
-        if self.termination_date is not None and self.termination_date < self.hire_date:
+        if (
+            self.termination_date is not None
+            and self.hire_date is not None
+            and self.termination_date < self.hire_date
+        ):
             raise ValueError("termination_date must be on or after hire_date")
         if self.date_of_birth is not None and self.date_of_birth > date.today():
             raise ValueError("date_of_birth cannot be in the future")
@@ -243,6 +256,9 @@ class EmployeeUpdate(BaseModel):
     termination_date: date | None = None
     supervisor_id: int | None = None
     location_id: int | None = None
+    # Merge semantics: keys present here are set/overwritten; keys omitted are
+    # left as-is. Coerced/validated against the registry in the route.
+    custom_fields: dict[str, Any] | None = None
 
     @field_validator("ssn")
     @classmethod

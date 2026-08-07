@@ -29,6 +29,7 @@ from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
 from app.services import reference_managers
 from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, require_scope
+from app.services.custom_fields import resolve_custom_fields
 from app.services.employee_validation import (
     resolve_employment_status_by_value,
     validate_country_id,
@@ -257,7 +258,15 @@ def create_employee(
     else:
         validate_supervisor(db, body.supervisor_id)
 
-    employee = Employee(**body.model_dump())
+    payload = body.model_dump()
+    raw_custom = payload.pop("custom_fields", None) or {}
+    resolved = resolve_custom_fields(db, raw_custom)
+    if resolved.errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="; ".join(resolved.errors),
+        )
+    employee = Employee(**payload, custom_fields=resolved.values)
     db.add(employee)
     try:
         db.commit()
@@ -373,11 +382,25 @@ def update_employee(
     if "ssn" in data and data["ssn"] is not None:
         validate_ssn_format(data["ssn"])
         validate_ssn_unique(db, data["ssn"], excluding_employee_id=employee_id)
-    if eff_term is not None and eff_term < eff_hire:
+    if eff_term is not None and eff_hire is not None and eff_term < eff_hire:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="termination_date must be on or after hire_date.",
         )
+
+    # Custom fields merge: coerce against the registry, then overlay onto the
+    # existing bag (omitted keys are untouched).
+    if "custom_fields" in data:
+        incoming = data.pop("custom_fields") or {}
+        resolved = resolve_custom_fields(db, incoming)
+        if resolved.errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="; ".join(resolved.errors),
+            )
+        merged = dict(employee.custom_fields or {})
+        merged.update(resolved.values)
+        employee.custom_fields = merged
 
     for field, value in data.items():
         setattr(employee, field, value)

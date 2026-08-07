@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% set page_title = "Data Import · Preview" %}
+{% block breadcrumb %}<span><a href="/ui/admin/import">Data Import</a></span> <span class="topbar__breadcrumb-sep">/</span> <span>Preview</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Preview changes</h1>
+    <p class="page-header__subtitle">Dry run — nothing is written until you confirm.</p>
+  </div>
+</div>
+
+{% include "data_import/_stepper.html" %}
+
+{% if preview.parse_error %}
+<div class="card" style="border-color: var(--danger-line);">
+  <div class="card__body">
+    <p style="color: var(--danger); margin: 0;"><strong>Could not process this import.</strong></p>
+    <p class="text-muted" style="margin-top: var(--s-2);">{{ preview.parse_error }}</p>
+    <div class="form-actions"><a href="/ui/admin/import/{{ batch.id }}/map" class="btn btn--secondary">Back to mapping</a></div>
+  </div>
+</div>
+{% else %}
+
+<div class="di-stats">
+  <div class="di-stat di-stat--new"><span class="di-stat__v">{{ preview.new_count }}</span><span class="di-stat__k">New</span></div>
+  <div class="di-stat di-stat--upd"><span class="di-stat__v">{{ preview.update_count }}</span><span class="di-stat__k">Updates</span></div>
+  <div class="di-stat di-stat--err"><span class="di-stat__v">{{ preview.error_count }}</span><span class="di-stat__k">Errors</span></div>
+</div>
+
+{% if preview.error_count %}
+<p class="text-muted mb-6">
+  {{ preview.error_count }} row{{ ' has' if preview.error_count == 1 else 's have' }} errors and will be
+  <strong>skipped</strong>. Go back to fix the mapping, or import the valid rows only.
+</p>
+{% endif %}
+
+<div class="card">
+  <div class="card__body" style="padding:0;">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:3rem;">Row</th>
+            <th style="width:7rem;">Action</th>
+            <th>Employee #</th>
+            <th>Name</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview.rows %}
+          <tr class="{% if not row.ok %}is-archived{% endif %}">
+            <td class="mono text-faint">{{ row.line }}</td>
+            <td>
+              {% if not row.ok %}<span class="badge badge--danger">Error</span>
+              {% elif row.intent == 'new' %}<span class="badge badge--success">New</span>
+              {% else %}<span class="badge badge--warning">Update</span>{% endif %}
+            </td>
+            <td class="mono">{{ row.employee_number or "—" }}</td>
+            <td>{{ row.display_name }}</td>
+            <td>
+              {% if not row.ok %}
+                <ul style="margin:0;padding-left:1.1rem;color:var(--danger);">
+                  {% for err in row.errors %}<li>{{ err }}</li>{% endfor %}
+                </ul>
+              {% elif row.custom_fields %}
+                <span class="text-faint text-xs">{{ row.custom_fields | length }} custom field{{ '' if row.custom_fields|length == 1 else 's' }}{% if row.intent == 'update' and row.changes %} · {{ row.changes | join(", ") }}{% endif %}</span>
+              {% elif row.intent == 'update' and row.changes %}
+                <span class="text-muted text-xs">Changes: {{ row.changes | join(", ") }}</span>
+              {% else %}
+                <span class="text-faint text-xs">{{ 'New employee' if row.intent == 'new' else 'No changes' }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% set importable = preview.new_count + preview.update_count %}
+<div class="di-actions">
+  <a href="/ui/admin/import/{{ batch.id }}/resolve" class="btn btn--secondary">← Back</a>
+  <div class="flex-spacer"></div>
+  <form method="post" action="/ui/admin/import/{{ batch.id }}/commit" style="margin:0;">
+    <button type="submit" class="btn btn--primary" {% if importable == 0 %}disabled{% endif %}>
+      Import {{ importable }} row{{ '' if importable == 1 else 's' }}{% if preview.error_count %} (skip {{ preview.error_count }}){% endif %}
+    </button>
+  </form>
+</div>
+
+{% endif %}
+{% endblock %}

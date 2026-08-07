@@ -98,7 +98,6 @@ REQUIRED_FOR_NEW: list[str] = [
     "employment_status",
     "department",
     "job_title",
-    "hire_date",
 ]
 
 # Human labels for the "changed fields" hint shown on Update rows.
@@ -177,6 +176,9 @@ class ImportRow:
     data: dict[str, object] = field(default_factory=dict)
     existing_id: int | None = None
     supervisor_ref: str | None = None  # target employee_number, if any
+    # Coerced custom-field values (key -> value) to write on commit. Populated by
+    # the Data Import wizard; empty for the plain CSV path.
+    custom_fields: dict[str, object] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -312,9 +314,13 @@ def _resolve_country(db: Session, raw: str) -> tuple[int | None, str | None]:
 
 
 def _resolve_state(
-    db: Session, raw: str, country_id: int | None
+    db: Session, raw: str, country_id: int | None, *, missing_ok: bool = False
 ) -> tuple[int | None, str | None]:
     if country_id is None:
+        # Without a country we can't scope the state. When the wizard is going to
+        # create missing lookups this isn't an error — just leave it unresolved.
+        if missing_ok:
+            return None, None
         return None, "Cannot resolve State/Province without a valid Country."
     lowered = raw.lower()
     state = (
@@ -327,6 +333,18 @@ def _resolve_state(
         .first()
     )
     if state is None:
+        # Fallback: match on the code *suffix* so a bare source code like "AL"
+        # resolves to a seeded ISO-3166-2 code like "US-AL".
+        for candidate in db.query(StateProvince).filter(
+            StateProvince.country_id == country_id
+        ):
+            code = (candidate.code or "").rsplit("-", 1)[-1].lower()
+            if code and code == lowered:
+                state = candidate
+                break
+    if state is None:
+        if missing_ok:
+            return None, None
         return None, f"State/Province '{raw}' not found for the given country."
     return state.id, None
 
@@ -345,19 +363,25 @@ def _resolve_status(db: Session, raw: str) -> tuple[int | None, str | None]:
     return status.id, None
 
 
-def _resolve_department(db: Session, raw: str) -> tuple[int | None, str | None]:
+def _resolve_department(
+    db: Session, raw: str, *, missing_ok: bool = False
+) -> tuple[int | None, str | None]:
     dept = (
         db.query(Department).filter(func.lower(Department.name) == raw.lower()).first()
     )
     if dept is None:
+        if missing_ok:
+            return None, None
         return None, f"Department '{raw}' not found."
     return dept.id, None
 
 
 def _resolve_job_title(
-    db: Session, raw: str, department_id: int | None
+    db: Session, raw: str, department_id: int | None, *, missing_ok: bool = False
 ) -> tuple[int | None, str | None]:
     if department_id is None:
+        if missing_ok:
+            return None, None
         return None, "Cannot resolve Job title without a valid Department."
     matches = (
         db.query(JobTitle)
@@ -368,15 +392,21 @@ def _resolve_job_title(
         .all()
     )
     if not matches:
+        if missing_ok:
+            return None, None
         return None, f"Job title '{raw}' not found in that department."
     if len(matches) > 1:
         return None, f"Job title '{raw}' is ambiguous in that department."
     return matches[0].id, None
 
 
-def _resolve_location(db: Session, raw: str) -> tuple[int | None, str | None]:
+def _resolve_location(
+    db: Session, raw: str, *, missing_ok: bool = False
+) -> tuple[int | None, str | None]:
     loc = db.query(Location).filter(func.lower(Location.name) == raw.lower()).first()
     if loc is None:
+        if missing_ok:
+            return None, None
         return None, f"Location '{raw}' not found."
     return loc.id, None
 
@@ -412,10 +442,30 @@ def parse_and_classify(db: Session, csv_text: str) -> ImportPreview:
     if not raw_rows:
         return ImportPreview(rows=[], parse_error="The file has no data rows.")
 
+    return classify_records(db, raw_rows)
+
+
+def classify_records(
+    db: Session,
+    raw_rows: list[dict[str, str]],
+    *,
+    missing_ok: bool = False,
+    custom_by_index: dict[int, dict[str, object]] | None = None,
+) -> ImportPreview:
+    """Classify already-parsed rows (keyed by :data:`COLUMNS`) into a preview.
+
+    Shared by the plain CSV path (:func:`parse_and_classify`) and the Data Import
+    wizard. ``missing_ok`` tolerates not-yet-existing departments/job titles/
+    locations/states (the wizard creates them at commit). ``custom_by_index``
+    attaches coerced custom-field values (1-based line -> {key: value}).
+    """
     # Phase A: resolve everything except supervisor.
     rows: list[ImportRow] = []
     for idx, raw in enumerate(raw_rows, start=1):
-        rows.append(_process_row(db, idx, raw))
+        row = _process_row(db, idx, raw, missing_ok=missing_ok)
+        if custom_by_index:
+            row.custom_fields = custom_by_index.get(idx, {})
+        rows.append(row)
 
     # Phase B: supervisor resolution, now that we know which employee_numbers
     # this file introduces. A supervisor reference is valid if it points at an
@@ -430,7 +480,9 @@ def _cell(raw: dict[str, str], col: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _process_row(db: Session, line: int, raw: dict[str, str]) -> ImportRow:
+def _process_row(
+    db: Session, line: int, raw: dict[str, str], *, missing_ok: bool = False
+) -> ImportRow:
     emp_no = _cell(raw, "employee_number")
     first = _cell(raw, "first_name")
     last = _cell(raw, "last_name")
@@ -520,7 +572,7 @@ def _process_row(db: Session, line: int, raw: dict[str, str]) -> ImportRow:
     state_raw = _cell(raw, "state_province")
     state_id = keep("state_province_id")
     if state_raw:
-        state_id, err = _resolve_state(db, state_raw, country_id)
+        state_id, err = _resolve_state(db, state_raw, country_id, missing_ok=missing_ok)
         if err:
             row.errors.append(err)
     note_change("state_province_id", state_id)
@@ -538,7 +590,7 @@ def _process_row(db: Session, line: int, raw: dict[str, str]) -> ImportRow:
     dept_raw = _cell(raw, "department")
     dept_id = cast("int | None", keep("department_id"))
     if dept_raw:
-        dept_id, err = _resolve_department(db, dept_raw)
+        dept_id, err = _resolve_department(db, dept_raw, missing_ok=missing_ok)
         if err:
             row.errors.append(err)
     note_change("department_id", dept_id)
@@ -547,7 +599,7 @@ def _process_row(db: Session, line: int, raw: dict[str, str]) -> ImportRow:
     title_raw = _cell(raw, "job_title")
     title_id = keep("job_title_id")
     if title_raw:
-        title_id, err = _resolve_job_title(db, title_raw, dept_id)
+        title_id, err = _resolve_job_title(db, title_raw, dept_id, missing_ok=missing_ok)
         if err:
             row.errors.append(err)
     else:
@@ -566,7 +618,7 @@ def _process_row(db: Session, line: int, raw: dict[str, str]) -> ImportRow:
     loc_raw = _cell(raw, "location")
     loc_id = keep("location_id")
     if loc_raw:
-        loc_id, err = _resolve_location(db, loc_raw)
+        loc_id, err = _resolve_location(db, loc_raw, missing_ok=missing_ok)
         if err:
             row.errors.append(err)
     note_change("location_id", loc_id)
@@ -751,10 +803,16 @@ def commit_preview(db: Session, preview: ImportPreview) -> CommitResult:
                 continue
             for f_name, value in payload.items():
                 setattr(employee, f_name, value)
+            if row.custom_fields:
+                merged = dict(employee.custom_fields or {})
+                merged.update(row.custom_fields)
+                employee.custom_fields = merged
             result.updated.append(
                 AppliedRow("updated", employee.id, employee.employee_number, row.display_name)
             )
         else:
+            if row.custom_fields:
+                payload["custom_fields"] = dict(row.custom_fields)
             employee = Employee(**payload)
             db.add(employee)
             result.created.append(

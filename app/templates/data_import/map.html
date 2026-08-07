@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% set page_title = "Data Import · Map" %}
+{% block breadcrumb %}<span><a href="/ui/admin/import">Data Import</a></span> <span class="topbar__breadcrumb-sep">/</span> <span>Map columns</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Map columns</h1>
+    <p class="page-header__subtitle">
+      From <span class="mono">{{ batch.filename }}</span> · {{ batch.row_count }} rows.
+      Match each source column to a field, a custom attribute, or ignore it.
+    </p>
+  </div>
+</div>
+
+{% include "data_import/_stepper.html" %}
+
+<form method="post" action="/ui/admin/import/{{ batch.id }}/map">
+  <div class="card">
+    <div class="card__header flex" style="justify-content:space-between;align-items:center;">
+      <h2 class="card__title">Column mapping</h2>
+      <div class="flex gap-2">
+        <span class="badge badge--neutral">{{ auto_count }} matched</span>
+        <span class="badge badge--neutral">{{ custom_count }} → custom</span>
+      </div>
+    </div>
+    <div class="card__body" style="padding:0;">
+      <div class="table-wrap">
+        <table class="table di-map">
+          <thead>
+            <tr>
+              <th style="width:22%;">Source column</th>
+              <th style="width:30%;">Sample value</th>
+              <th>Target field</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in columns_view %}
+            <tr>
+              <td class="di-map__src">
+                {{ c.source }}
+                <input type="hidden" name="source" value="{{ c.source }}" />
+              </td>
+              <td><span class="mono text-xs text-muted">{{ c.sample | truncate(40) if c.sample else "—" }}</span></td>
+              <td>
+                <select class="input di-map__select" name="target">
+                  <optgroup label="Standard fields">
+                    {% for key, label in standard_targets %}
+                    <option value="{{ key }}" {% if c.selected == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </optgroup>
+                  <optgroup label="Transforms">
+                    <option value="__split_name__" {% if c.selected == '__split_name__' %}selected{% endif %}>Split “Last, First” → names</option>
+                  </optgroup>
+                  <optgroup label="Custom field">
+                    <option value="custom:text" {% if c.selected == 'custom:text' %}selected{% endif %}>Custom · text</option>
+                    <option value="custom:boolean" {% if c.selected == 'custom:boolean' %}selected{% endif %}>Custom · yes/no</option>
+                    <option value="custom:number" {% if c.selected == 'custom:number' %}selected{% endif %}>Custom · number</option>
+                    <option value="custom:date" {% if c.selected == 'custom:date' %}selected{% endif %}>Custom · date</option>
+                  </optgroup>
+                  <option value="__ignore__" {% if c.selected == '__ignore__' %}selected{% endif %}>— Ignore</option>
+                </select>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card di-saveprofile">
+    <div class="card__body flex gap-3" style="align-items:center;flex-wrap:wrap;">
+      <label class="di-check">
+        <input type="checkbox" name="save_profile" value="1"
+               {% if batch.profile_id %}checked{% endif %} />
+        Save this mapping as a profile
+      </label>
+      <input class="input" style="max-width:280px;" type="text" name="profile_name"
+             placeholder="e.g. Progress Rail POC" />
+      <span class="form-hint" style="margin:0;">Reusable next time you import this customer.</span>
+    </div>
+  </div>
+
+  <div class="di-actions">
+    <a href="/ui/admin/import" class="btn btn--secondary">Cancel</a>
+    <div class="flex-spacer"></div>
+    <button type="submit" class="btn btn--primary">Next: Resolve values →</button>
+  </div>
+</form>
+{% endblock %}

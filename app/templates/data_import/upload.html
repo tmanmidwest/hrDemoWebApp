@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% set page_title = "Data Import" %}
+{% block breadcrumb %}<span>Admin</span> <span class="topbar__breadcrumb-sep">/</span> <span>Data Import</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Import employee data</h1>
+    <p class="page-header__subtitle">
+      Map a customer's HR extract onto the system, create any missing lookups, and
+      load it — then it's available to the API and your Saviynt connector.
+    </p>
+  </div>
+</div>
+
+{% set step = 1 %}
+{% include "data_import/_stepper.html" %}
+
+<div class="di-grid">
+  <div class="card">
+    <div class="card__header"><h2 class="card__title">Upload a file</h2></div>
+    <form method="post" action="/ui/admin/import/upload" enctype="multipart/form-data" class="card__body">
+      <p class="text-muted mb-6">
+        Excel (<span class="mono">.xlsx</span>) or <span class="mono">.csv</span>. We'll read the
+        columns and a few sample rows — nothing is saved until you confirm at the end.
+      </p>
+      <div class="form-row">
+        <label class="label" for="import-file">Data file<span class="label__required">*</span></label>
+        <input class="input" type="file" id="import-file" name="file"
+               accept=".xlsx,.xlsm,.xls,.csv,text/csv" required />
+      </div>
+
+      {% if profiles %}
+      <div class="form-row">
+        <label class="label" for="profile_id">Apply a saved profile</label>
+        <select class="input" id="profile_id" name="profile_id">
+          <option value="">Auto-detect the mapping</option>
+          {% for p in profiles %}
+          <option value="{{ p.id }}">{{ p.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="form-hint">Re-run a customer you've imported before — the mapping is pre-filled.</p>
+      </div>
+      {% endif %}
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Upload &amp; continue</button>
+      </div>
+    </form>
+  </div>
+
+  <aside class="card di-aside">
+    <div class="card__header"><h2 class="card__title">How it works</h2></div>
+    <div class="card__body">
+      <ol class="di-howto">
+        <li><strong>Map</strong> each column to a field or a custom attribute.</li>
+        <li><strong>Resolve</strong> value codes and create any missing departments, titles, or locations.</li>
+        <li><strong>Preview</strong> exactly what will be added or updated.</li>
+        <li><strong>Import</strong> — and save the mapping to re-run in one click.</li>
+      </ol>
+      {% if recent %}
+      <div class="di-recent">
+        <div class="sidebar__section-label" style="padding-left:0;">Recent imports</div>
+        {% for b in recent %}
+        <div class="di-recent__item">
+          <span class="mono text-xs">{{ b.filename or "—" }}</span>
+          <span class="text-faint text-xs">
+            {{ (b.result or {}).get("created", 0) }} added · {{ (b.result or {}).get("updated", 0) }} updated
+          </span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+{% endblock %}
