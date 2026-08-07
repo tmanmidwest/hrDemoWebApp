@@ -45,6 +45,20 @@ backward-compatible — existing data and API keys keep working.
   that don't carry a hire date no longer force a placeholder. The API, import,
   and UI validation were relaxed to match.
 - The employee CSV template/import no longer requires `hire_date`.
+- **Deleting a department is now safe and explicit.** If employees are still
+  assigned to the department (or any of its job titles), the delete is blocked
+  with a message to reassign them first — employees are never orphaned or
+  cascade-deleted. If only job titles remain, a confirmation page lists them and
+  deletes the department and its titles together on confirm.
+
+### Fixed
+
+- **Deleted default org data no longer reappears after a rebuild.** Default
+  departments, job titles, and locations are now seeded only once (tracked by
+  `app_config.org_defaults_seeded`); an admin's later deletions persist across
+  restarts and image rebuilds. Restoring the defaults remains available via
+  Settings → Reset. Existing installs are marked already-seeded on upgrade, so
+  nothing is re-created.
 
 ## [1.6.0] — 2026-08-06
 

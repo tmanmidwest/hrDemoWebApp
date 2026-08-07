@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set page_title = "Delete Department" %}
+
+{% block breadcrumb %}
+<span>Lookups</span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span><a href="/ui/lookups/departments">Departments</a></span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>Delete</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Delete “{{ dept.name }}”?</h1>
+    <p class="page-header__subtitle">
+      No employees are assigned to this department, but it still has job titles.
+      Deleting the department will also delete these job titles.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="max-width: 640px;">
+  <div class="card__body">
+    <p class="text-muted mb-6">
+      The following <strong>{{ titles | length }}</strong> job title{{ '' if titles | length == 1 else 's' }}
+      will be deleted along with the department:
+    </p>
+    <ul class="di-titlelist">
+      {% for t in titles %}
+      <li>{{ t.name }}</li>
+      {% endfor %}
+    </ul>
+
+    <div class="di-actions" style="margin-top: var(--s-5);">
+      <a href="/ui/lookups/departments" class="btn btn--secondary">Cancel</a>
+      <div class="flex-spacer"></div>
+      <form method="post" action="/ui/lookups/departments/{{ dept.id }}/delete" style="margin:0;">
+        <input type="hidden" name="confirm" value="1" />
+        <button type="submit" class="btn btn--primary" style="background: var(--danger); border-color: var(--danger);">
+          Delete department &amp; {{ titles | length }} job title{{ '' if titles | length == 1 else 's' }}
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

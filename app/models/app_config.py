@@ -38,6 +38,13 @@ class AppConfig(Base, TimestampMixin):
     reference_managers_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # Set True once the default departments, job titles, and locations have been
+    # seeded. Startup seeding checks this so an admin's later deletions of seeded
+    # org data are NOT re-created on the next restart/rebuild. Restoring the
+    # defaults is a deliberate action via Settings → Reset.
+    org_defaults_seeded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     def __repr__(self) -> str:
         return f"<AppConfig audit_retention_days={self.audit_retention_days}>"

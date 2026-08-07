@@ -140,8 +140,21 @@ def seed_database(db: Session, settings: Settings | None = None) -> None:
     seed_countries(db)
     seed_states_provinces(db)
     seed_employment_statuses(db)
-    seed_departments_and_titles(db)
-    seed_locations(db)
+
+    # Default departments, job titles, and locations are seeded ONCE (tracked by
+    # app_config.org_defaults_seeded). After that, an admin's deletions of that
+    # org data persist across restarts/rebuilds rather than reappearing. Use
+    # Settings → Reset to deliberately restore the defaults.
+    from app.services.system_config import get_config, invalidate
+
+    config = get_config(db)
+    if not config.org_defaults_seeded:
+        seed_departments_and_titles(db)
+        seed_locations(db)
+        config.org_defaults_seeded = True
+        db.add(config)
+        invalidate()
+
     seed_admin_user(db, settings)
     seed_sample_employees(db)
 

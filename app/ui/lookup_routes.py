@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -859,25 +860,81 @@ def update_dept(
 def delete_dept(
     dept_id: int,
     request: Request,
+    confirm: str | None = Form(None),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
 ) -> Response:
     d = db.get(Department, dept_id)
     if d is None:
         raise HTTPException(status_code=404, detail="Department not found.")
-    emp_refs = count_references(db, Employee, Employee.department_id, dept_id)
-    title_refs = count_references(db, JobTitle, JobTitle.department_id, dept_id)
-    if emp_refs or title_refs:
+
+    titles = (
+        db.query(JobTitle)
+        .filter(JobTitle.department_id == dept_id)
+        .order_by(JobTitle.name)
+        .all()
+    )
+    title_ids = [t.id for t in titles]
+
+    # Employees "attached" = assigned to this department OR to one of its job
+    # titles. Deleting is never allowed while any employee still points here —
+    # they must be reassigned first (we won't orphan or cascade employees).
+    emp_conditions = [Employee.department_id == dept_id]
+    if title_ids:
+        emp_conditions.append(Employee.job_title_id.in_(title_ids))
+    emp_count = (
+        db.query(Employee).filter(or_(*emp_conditions)).distinct().count()
+    )
+    if emp_count:
         flash(
             request,
-            f"Cannot delete '{d.name}': still referenced by {emp_refs} employee(s) and {title_refs} job title(s).",
+            f"Can't delete '{d.name}' — {emp_count} employee(s) are still "
+            "assigned to it or its job titles. Reassign them to another "
+            "department first, then delete.",
             "error",
         )
         return RedirectResponse(url="/ui/lookups/departments", status_code=303)
+
+    # No employees, but job titles exist → confirm the cascade before deleting.
+    if titles and not confirm:
+        return render(
+            request,
+            "lookups/department_delete_confirm.html",
+            current_user=user,
+            active_subsection="departments",
+            dept=d,
+            titles=titles,
+        )
+
+    # Safe to delete: remove the department's job titles (if any), then itself.
+    for t in titles:
+        title_name, title_id = t.name, t.id
+        db.delete(t)
+        record_event(
+            category="lookup",
+            event_type="lookup.job_title.deleted",
+            actor_type="user",
+            actor_label=user.username,
+            actor_id=user.id,
+            target_type="job_title",
+            target_id=title_id,
+            target_label=title_name,
+            message=f"Deleted job title '{title_name}' (with department '{d.name}')",
+            detail={"surface": "ui", "cascade": True},
+            request=request,
+        )
+
     dept_name = d.name
     db.delete(d)
     db.commit()
-    flash(request, f"Deleted {dept_name}.", "success")
+    if titles:
+        flash(
+            request,
+            f"Deleted {dept_name} and {len(titles)} job title(s).",
+            "success",
+        )
+    else:
+        flash(request, f"Deleted {dept_name}.", "success")
     record_event(
         category="lookup",
         event_type="lookup.department.deleted",
@@ -888,7 +945,7 @@ def delete_dept(
         target_id=dept_id,
         target_label=dept_name,
         message=f"Deleted department '{dept_name}'",
-        detail={"surface": "ui"},
+        detail={"surface": "ui", "titles_deleted": len(titles)},
         request=request,
     )
     return RedirectResponse(url="/ui/lookups/departments", status_code=303)
