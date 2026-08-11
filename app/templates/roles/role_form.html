@@ -28,6 +28,16 @@
       <label class="label" for="description">Description</label>
       <input class="input" id="description" name="description" value="{{ form.description or '' }}" maxlength="255" />
     </div>
+    <div class="form-row">
+      <label class="label" for="access_level">Access level</label>
+      <select class="select" id="access_level" name="access_level">
+        <option value="" {% if not form.access_level %}selected{% endif %}>— Unspecified —</option>
+        {% for value, label in access_levels %}
+        <option value="{{ value }}" {% if form.access_level == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div class="form-hint">Describes what this role conveys, for the catalog. Not sent to the API/IGA and not enforced here.</div>
+    </div>
     <div class="checkbox-row">
       <input type="checkbox" id="is_active" name="is_active" value="1" {% if form.is_active %}checked{% endif %} />
       <label for="is_active">Active <span class="text-muted">(inactive roles can't be newly granted)</span></label>

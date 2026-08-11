@@ -11,6 +11,7 @@ and provisions / deprovisions by granting / revoking `RoleAssignment` rows.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
@@ -21,6 +22,34 @@ from app.models._mixins import TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.app_user import AppUser
+
+
+class AccessLevel(StrEnum):
+    """Descriptive access a role is intended to convey, for the catalog UI.
+
+    This is *documentation of intent* only — a human-readable annotation shown
+    in the role editor and catalog. It is deliberately NOT exposed through the
+    REST API and does NOT enforce anything in this app: the IGA reads the role
+    as an entitlement and enforces the corresponding access in downstream target
+    systems. Left unset (NULL) when an admin hasn't classified the role yet.
+    """
+
+    VIEW_ONLY = "view_only"
+    MANAGE_EMPLOYEES = "manage_employees"
+    FULL_SYSTEM = "full_system"
+
+    @property
+    def label(self) -> str:
+        return {
+            "view_only": "View only",
+            "manage_employees": "Manage employees",
+            "full_system": "Full system",
+        }[self.value]
+
+    @classmethod
+    def choices(cls) -> list[tuple[str, str]]:
+        """(value, label) pairs for rendering a <select>."""
+        return [(level.value, level.label) for level in cls]
 
 
 class Role(Base, TimestampMixin):
@@ -39,12 +68,23 @@ class Role(Base, TimestampMixin):
     )
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # UI-only classification of the access this role conveys. NOT exposed via
+    # the REST API (see AccessLevel); purely descriptive for the catalog.
+    access_level: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
     assignments: Mapped[list[RoleAssignment]] = relationship(
         "RoleAssignment",
         back_populates="role",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def access_level_label(self) -> str:
+        """Human-friendly label for the access level, or an em dash if unset."""
+        try:
+            return AccessLevel(self.access_level).label
+        except ValueError:
+            return "—"
 
     def __repr__(self) -> str:
         return f"<Role name={self.name!r} is_active={self.is_active}>"

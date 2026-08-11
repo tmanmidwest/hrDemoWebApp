@@ -17,7 +17,17 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.v1._helpers import count_references
 from app.db import get_db
-from app.models import AppUser, Role, RoleAssignment
+from app.models import AccessLevel, AppUser, Role, RoleAssignment
+
+
+def _clean_access_level(raw: str | None) -> str | None:
+    """Normalize a submitted access level to a valid value or None (unset)."""
+    if not raw:
+        return None
+    try:
+        return AccessLevel(raw).value
+    except ValueError:
+        return None
 from app.services.audit import record_event
 from app.ui.dependencies import require_admin
 from app.ui.flash import flash
@@ -72,6 +82,7 @@ def show_new_role(
         row=None,
         form={"is_active": True},
         form_action="/ui/roles/new",
+        access_levels=AccessLevel.choices(),
     )
 
 
@@ -80,6 +91,7 @@ def create_role(
     request: Request,
     name: str = Form(...),
     description: str | None = Form(None),
+    access_level: str | None = Form(None),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
@@ -87,10 +99,14 @@ def create_role(
     form = {
         "name": name.strip(),
         "description": (description or "").strip() or None,
+        "access_level": _clean_access_level(access_level),
         "is_active": bool(is_active),
     }
     role = Role(
-        name=form["name"], description=form["description"], is_active=form["is_active"]
+        name=form["name"],
+        description=form["description"],
+        access_level=form["access_level"],
+        is_active=form["is_active"],
     )
     db.add(role)
     try:
@@ -105,6 +121,7 @@ def create_role(
             row=None,
             form=form,
             form_action="/ui/roles/new",
+            access_levels=AccessLevel.choices(),
             error=f"Role '{form['name']}' already exists.",
         )
     flash(request, f"Added role '{role.name}'.", "success")
@@ -116,7 +133,7 @@ def create_role(
         target_id=role.id,
         target_label=role.name,
         message=f"Created role '{role.name}'",
-        detail={"surface": "ui"},
+        detail={"surface": "ui", "access_level": role.access_level},
         request=request,
     )
     return RedirectResponse(url="/ui/roles", status_code=303)
@@ -141,9 +158,11 @@ def show_edit_role(
         form={
             "name": role.name,
             "description": role.description,
+            "access_level": role.access_level,
             "is_active": role.is_active,
         },
         form_action=f"/ui/roles/{role.id}/edit",
+        access_levels=AccessLevel.choices(),
     )
 
 
@@ -153,6 +172,7 @@ def update_role(
     request: Request,
     name: str = Form(...),
     description: str | None = Form(None),
+    access_level: str | None = Form(None),
     is_active: str | None = Form(None),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
@@ -162,6 +182,7 @@ def update_role(
         raise HTTPException(status_code=404, detail="Role not found.")
     role.name = name.strip()
     role.description = (description or "").strip() or None
+    role.access_level = _clean_access_level(access_level)
     role.is_active = bool(is_active)
     try:
         db.commit()
@@ -174,7 +195,7 @@ def update_role(
             target_id=role.id,
             target_label=role.name,
             message=f"Updated role '{role.name}'",
-            detail={"surface": "ui"},
+            detail={"surface": "ui", "access_level": role.access_level},
             request=request,
         )
     except IntegrityError:

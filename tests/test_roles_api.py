@@ -73,6 +73,16 @@ def test_create_get_update_delete_role(api_client: TestClient) -> None:
     assert api_client.get(f"{ROLES}{rid}").status_code == 404
 
 
+def test_api_does_not_expose_access_level(api_client: TestClient) -> None:
+    """`access_level` is a UI-only annotation; it must never reach the API/IGA."""
+    roles = api_client.get(ROLES).json()
+    assert roles, "expected seeded roles"
+    for role in roles:
+        assert "access_level" not in role
+    one = api_client.get(f"{ROLES}{roles[0]['id']}").json()
+    assert "access_level" not in one
+
+
 def test_create_duplicate_role_conflict(api_client: TestClient) -> None:
     assert api_client.post(ROLES, json={"name": "Dup"}).status_code == 201
     assert api_client.post(ROLES, json={"name": "Dup"}).status_code == 409

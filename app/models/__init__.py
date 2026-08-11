@@ -20,7 +20,7 @@ from app.models.job_title import JobTitle
 from app.models.location import Location
 from app.models.mcp_gateway_token import McpGatewayToken
 from app.models.oauth_client import OAuthClient
-from app.models.role import Role, RoleAssignment
+from app.models.role import AccessLevel, Role, RoleAssignment
 from app.models.state_province import StateProvince
 from app.models.user_identity import UserIdentity
 
@@ -41,6 +41,7 @@ __all__ = [
     "JobTitle",
     "Location",
     "McpGatewayToken",
+    "AccessLevel",
     "OAuthClient",
     "Role",
     "RoleAssignment",
