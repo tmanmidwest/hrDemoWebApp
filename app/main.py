@@ -142,6 +142,7 @@ def create_app() -> FastAPI:
     from app.api.v1.oauth_clients import router as oauth_clients_router
     from app.api.v1.oauth_token import router as oauth_token_router
     from app.api.v1.reports import router as reports_router
+    from app.api.v1.roles import router as roles_router
     from app.api.v1.session_auth import router as session_auth_router
     from app.api.v1.states_provinces import router as states_provinces_router
     from app.api.v1.users import router as users_router
@@ -154,6 +155,9 @@ def create_app() -> FastAPI:
     # /api/v1/users (console account management) and /api/v1/backup (export)
     app.include_router(users_router, prefix="/api/v1")
     app.include_router(backup_router, prefix="/api/v1")
+
+    # /api/v1/roles (access-role catalog + assignment reconciliation feed)
+    app.include_router(roles_router, prefix="/api/v1")
 
     # /api/v1/* (lookup tables and employees)
     app.include_router(countries_router, prefix="/api/v1")
@@ -184,6 +188,7 @@ def create_app() -> FastAPI:
     from app.ui.employee_routes import router as ui_employee_router
     from app.ui.lookup_routes import router as ui_lookup_router
     from app.ui.oidc_routes import router as ui_oidc_router
+    from app.ui.role_routes import router as ui_role_router
     from app.ui.schema_routes import router as ui_schema_router
     from app.ui.settings_routes import router as ui_settings_router
 
@@ -196,6 +201,7 @@ def create_app() -> FastAPI:
     app.include_router(ui_data_import_router)
     app.include_router(ui_schema_router)
     app.include_router(ui_lookup_router)
+    app.include_router(ui_role_router)
     app.include_router(ui_settings_router)
     app.include_router(ui_audit_router)
 
