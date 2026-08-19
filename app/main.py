@@ -156,7 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(users_router, prefix="/api/v1")
     app.include_router(backup_router, prefix="/api/v1")
 
-    # /api/v1/roles (access-role catalog + assignment reconciliation feed)
+    # /api/v1/roles (read-only role/entitlement catalog)
     app.include_router(roles_router, prefix="/api/v1")
 
     # /api/v1/* (lookup tables and employees)

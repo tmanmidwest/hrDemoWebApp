@@ -3,8 +3,42 @@
 All notable changes to the Demo HR Source of Truth App are documented here.
 
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
-Database migrations run automatically on startup; all changes below are
-backward-compatible — existing data and API keys keep working.
+Database migrations run automatically on startup; changes are backward-compatible
+unless a **Breaking** section says otherwise.
+
+## [1.8.0] — 2026-08-19
+
+Roles are now a **single concept**. A console account's role — **View Only /
+Management / Admin** — is both what enforces access in the UI *and* the
+entitlement an IGA platform (e.g. Saviynt) governs. The separate "Access Roles"
+catalog and its per-user assignments (which never actually changed anyone's
+access) are gone.
+
+### Breaking
+
+- **Removed the access-role catalog and assignment API.** `POST/PATCH/DELETE
+  /api/v1/roles`, `GET /api/v1/roles/assignments`, and the per-user
+  `GET/POST/DELETE /api/v1/users/{id}/roles` endpoints no longer exist.
+- **`GET /api/v1/roles` is now read-only** and returns the fixed three-role
+  catalog — `{id, name, description}` where `id` is the stored role value
+  (`admin` / `management` / `view_only`). It is always available regardless of
+  who is assigned, so an IGA can import it as its entitlement list.
+- **Dropped the `roles:write` scope.** A user's role is now governed by setting
+  the single-valued `role` attribute via `PATCH /api/v1/users/{id}`
+  (`users:write`). The **IGA / Provisioning** key preset is now
+  `employees:read, users:read, users:write, roles:read`. Existing keys that
+  carried `roles:write` simply lose that (now-unknown) scope.
+- **Dropped the `roles` and `role_assignments` tables** (migration `0018`),
+  along with the `Role`, `RoleAssignment`, and `AccessLevel` models and the
+  descriptive `access_level` classification.
+
+### Changed
+
+- **Roles UI is now a read-only catalog.** Settings → **Roles** lists the three
+  fixed roles and how many active accounts hold each — mirroring what an IGA
+  imports. Role **assignment** happens where it always has: Settings →
+  **Users** (add a user with a role, or change a user's role). The old
+  Assignments and role-editor pages were removed.
 
 ## [1.7.2] — 2026-08-07
 

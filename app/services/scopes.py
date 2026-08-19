@@ -30,9 +30,7 @@ SCOPES: list[dict[str, str]] = [
     {"value": "users:write", "group": "Console users", "label": "Manage users",
      "description": "Create, update, and enable/disable console accounts."},
     {"value": "roles:read", "group": "Roles", "label": "Read roles",
-     "description": "List roles and read per-user role assignments."},
-    {"value": "roles:write", "group": "Roles", "label": "Manage roles",
-     "description": "Create/update/delete roles and grant/revoke user role assignments."},
+     "description": "List the role catalog (the entitlements an IGA imports)."},
     {"value": "reports:read", "group": "Reports", "label": "Read reports",
      "description": "Run aggregate reports: headcount, org structure, and activity summaries."},
     {"value": "backup:create", "group": "System", "label": "Create backups",
@@ -49,7 +47,7 @@ PRESETS: dict[str, list[str]] = {
     "Read-Only (View All)": ["employees:read", "lookups:read", "users:read",
                              "roles:read", "reports:read"],
     "Reporting / MCP": ["employees:read", "lookups:read", "reports:read"],
-    "IGA / Provisioning": ["employees:read", "users:read", "roles:read", "roles:write"],
+    "IGA / Provisioning": ["employees:read", "users:read", "users:write", "roles:read"],
     "Full Admin": [ADMIN],
 }
 

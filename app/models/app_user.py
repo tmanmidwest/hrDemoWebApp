@@ -20,13 +20,48 @@ class UserRole(StrEnum):
       the activity log; no settings access.
     - VIEW_ONLY: read-only access to employees and the activity log.
 
-    Roles govern the web UI only; the REST API is authorized separately via
-    API keys and OAuth clients.
+    This is the *single* role concept for console accounts: it both enforces UI
+    authorization and is the entitlement an IGA platform governs. Each user
+    holds exactly one role (stored on `AppUser.role`); the fixed set of values
+    is published as the entitlement catalog via `GET /api/v1/roles` (see
+    `catalog()`), and a user's assignment is read/written through the users API.
+    The REST API itself is authorized separately via API keys and OAuth clients.
     """
 
     ADMIN = "admin"
     MANAGEMENT = "management"
     VIEW_ONLY = "view_only"
+
+    @property
+    def label(self) -> str:
+        """Human-friendly role name for display and catalog listings."""
+        return {
+            "admin": "Admin",
+            "management": "Management",
+            "view_only": "View Only",
+        }[self.value]
+
+    @property
+    def description(self) -> str:
+        """One-line summary of what the role grants — shown in the catalog."""
+        return {
+            "admin": "Full system access, including settings and user management.",
+            "management": "Full employee management; view-only on lookups and activity.",
+            "view_only": "Read-only access to employees and the activity log.",
+        }[self.value]
+
+    @classmethod
+    def catalog(cls) -> list[dict[str, str]]:
+        """The fixed entitlement catalog, ordered most- to least-privileged.
+
+        Each entry is ``{"id", "name", "description"}`` where ``id`` is the
+        stored role value (Saviynt correlates entitlements on it). Backed by the
+        enum, so the catalog always exists regardless of who is assigned.
+        """
+        return [
+            {"id": role.value, "name": role.label, "description": role.description}
+            for role in (cls.ADMIN, cls.MANAGEMENT, cls.VIEW_ONLY)
+        ]
 
 
 class AppUser(Base, TimestampMixin):

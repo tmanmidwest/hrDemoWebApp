@@ -181,6 +181,35 @@ def test_admin_sidebar_shows_settings_link(admin_client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Read-only role catalog page (/ui/roles)
+# ---------------------------------------------------------------------------
+
+
+def test_admin_roles_page_lists_the_three_roles(admin_client: TestClient) -> None:
+    resp = admin_client.get("/ui/roles")
+    assert resp.status_code == 200
+    body = resp.text
+    for label in ("Admin", "Management", "View Only"):
+        assert label in body
+    # It's a read-only catalog — no add/edit/assignment affordances.
+    assert "+ Add Role" not in body
+    assert "/ui/roles/new" not in body
+    assert "/ui/roles/assignments" not in body
+
+
+def test_roles_page_shows_assigned_count(admin_client: TestClient) -> None:
+    """The seeded admin counts against the Admin role."""
+    body = admin_client.get("/ui/roles").text
+    assert "1 account" in body  # exactly the seeded admin holds 'admin'
+
+
+def test_roles_page_is_admin_only(login_as) -> None:
+    for role in ("view_only", "management"):
+        c = login_as(role, username=f"{role}_roles_page")
+        assert _redirects_to_employees(c.get("/ui/roles", follow_redirects=False))
+
+
+# ---------------------------------------------------------------------------
 # Role assignment: create + change
 # ---------------------------------------------------------------------------
 

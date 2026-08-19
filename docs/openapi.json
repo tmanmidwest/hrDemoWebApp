@@ -2240,221 +2240,28 @@
         "title": "ReactivateRequest",
         "type": "object"
       },
-      "RoleAssignmentOut": {
-        "description": "A grant of a role to a console account.\n\n`granted_at` is the assignment's creation time; `updated_at` backs the\n`updated_since` reconciliation feed. Both the user and role are embedded so\nan IGA connector can reconcile without extra lookups.",
-        "properties": {
-          "granted_at": {
-            "description": "When the role was granted (provisioned).",
-            "format": "date-time",
-            "title": "Granted At",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "role": {
-            "$ref": "#/components/schemas/RoleAssignmentRoleRef"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
-          },
-          "user": {
-            "$ref": "#/components/schemas/RoleAssignmentUserRef"
-          }
-        },
-        "required": [
-          "id",
-          "user",
-          "role",
-          "granted_at",
-          "updated_at"
-        ],
-        "title": "RoleAssignmentOut",
-        "type": "object"
-      },
-      "RoleAssignmentRoleRef": {
-        "description": "The role side of an assignment, embedded in assignment responses.",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "is_active": {
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "is_active"
-        ],
-        "title": "RoleAssignmentRoleRef",
-        "type": "object"
-      },
-      "RoleAssignmentUserRef": {
-        "description": "The console-account side of an assignment, embedded in responses.",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "integer"
-          },
-          "username": {
-            "title": "Username",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "username"
-        ],
-        "title": "RoleAssignmentUserRef",
-        "type": "object"
-      },
-      "RoleCreate": {
-        "description": "Request body for creating an access role.",
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "is_active": {
-            "default": true,
-            "title": "Is Active",
-            "type": "boolean"
-          },
-          "name": {
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "RoleCreate",
-        "type": "object"
-      },
-      "RoleGrant": {
-        "description": "Request body to grant (provision) a role to a console account.",
-        "properties": {
-          "role_id": {
-            "description": "ID of the role to grant.",
-            "title": "Role Id",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "role_id"
-        ],
-        "title": "RoleGrant",
-        "type": "object"
-      },
       "RoleOut": {
-        "description": "An access role as returned by the roles API.",
+        "description": "A role as returned by the catalog API.\n\n`id` is the stored role value (e.g. ``\"admin\"``) — the same value that\nappears as `role` on a user, so an IGA connector can map a user's role\ndirectly onto the imported entitlement.",
         "properties": {
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
           "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
+            "title": "Description",
+            "type": "string"
           },
           "id": {
             "title": "Id",
-            "type": "integer"
-          },
-          "is_active": {
-            "title": "Is Active",
-            "type": "boolean"
+            "type": "string"
           },
           "name": {
             "title": "Name",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
             "type": "string"
           }
         },
         "required": [
           "id",
           "name",
-          "description",
-          "is_active",
-          "created_at",
-          "updated_at"
+          "description"
         ],
         "title": "RoleOut",
-        "type": "object"
-      },
-      "RoleUpdate": {
-        "description": "Request body for updating an access role. All fields optional.",
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 255,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "is_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Active"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 100,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          }
-        },
-        "title": "RoleUpdate",
         "type": "object"
       },
       "SessionInfoResponse": {
@@ -2777,7 +2584,7 @@
         "type": "object"
       },
       "UserRole": {
-        "description": "Authorization role governing what a user can do in the web UI.\n\n- ADMIN: full access, including settings and lookup management.\n- MANAGEMENT: full employee CRUD; can view (but not manage) lookups and\n  the activity log; no settings access.\n- VIEW_ONLY: read-only access to employees and the activity log.\n\nRoles govern the web UI only; the REST API is authorized separately via\nAPI keys and OAuth clients.",
+        "description": "Authorization role governing what a user can do in the web UI.\n\n- ADMIN: full access, including settings and lookup management.\n- MANAGEMENT: full employee CRUD; can view (but not manage) lookups and\n  the activity log; no settings access.\n- VIEW_ONLY: read-only access to employees and the activity log.\n\nThis is the *single* role concept for console accounts: it both enforces UI\nauthorization and is the entitlement an IGA platform governs. Each user\nholds exactly one role (stored on `AppUser.role`); the fixed set of values\nis published as the entitlement catalog via `GET /api/v1/roles` (see\n`catalog()`), and a user's assignment is read/written through the users API.\nThe REST API itself is authorized separately via API keys and OAuth clients.",
         "enum": [
           "admin",
           "management",
@@ -2874,7 +2681,7 @@
   "info": {
     "description": "Lightweight HR Source of Truth for Saviynt Identity Cloud POC and integration testing.",
     "title": "Demo HR Source of Truth App",
-    "version": "1.7.2"
+    "version": "1.8.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -5235,26 +5042,8 @@
     },
     "/api/v1/roles/": {
       "get": {
-        "description": "List the access-role catalog.",
+        "description": "List the fixed role catalog (the entitlements an IGA imports).",
         "operationId": "list_roles_api_v1_roles__get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "is_active",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Is Active"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -5269,280 +5058,9 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "List Roles",
-        "tags": [
-          "roles"
-        ]
-      },
-      "post": {
-        "description": "Create an access role.",
-        "operationId": "create_role_api_v1_roles__post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RoleCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Role",
-        "tags": [
-          "roles"
-        ]
-      }
-    },
-    "/api/v1/roles/assignments": {
-      "get": {
-        "description": "Flat feed of every role grant, for pull-based reconciliation.\n\nDeclared before ``/{role_id}`` so the literal path wins over the dynamic\ninteger segment.",
-        "operationId": "list_role_assignments_api_v1_roles_assignments_get",
-        "parameters": [
-          {
-            "description": "Only assignments for this console account.",
-            "in": "query",
-            "name": "user_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Only assignments for this console account.",
-              "title": "User Id"
-            }
-          },
-          {
-            "description": "Only assignments of this role.",
-            "in": "query",
-            "name": "role_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Only assignments of this role.",
-              "title": "Role Id"
-            }
-          },
-          {
-            "description": "ISO-8601 datetime. Returns only assignments granted or changed at or after this time — for incremental IGA reconciliation.",
-            "in": "query",
-            "name": "updated_since",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date-time",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "ISO-8601 datetime. Returns only assignments granted or changed at or after this time — for incremental IGA reconciliation.",
-              "title": "Updated Since"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/RoleAssignmentOut"
-                  },
-                  "title": "Response List Role Assignments Api V1 Roles Assignments Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Role Assignments",
-        "tags": [
-          "roles"
-        ]
-      }
-    },
-    "/api/v1/roles/{role_id}": {
-      "delete": {
-        "description": "Delete an access role.\n\nBlocked while the role is still granted to any account — deactivate it\n(``is_active=false``) or revoke the assignments first.",
-        "operationId": "delete_role_api_v1_roles__role_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "role_id",
-            "required": true,
-            "schema": {
-              "title": "Role Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Role",
-        "tags": [
-          "roles"
-        ]
-      },
-      "get": {
-        "description": "Get a single access role by ID.",
-        "operationId": "get_role_api_v1_roles__role_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "role_id",
-            "required": true,
-            "schema": {
-              "title": "Role Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Role",
-        "tags": [
-          "roles"
-        ]
-      },
-      "patch": {
-        "description": "Update an access role.",
-        "operationId": "update_role_api_v1_roles__role_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "role_id",
-            "required": true,
-            "schema": {
-              "title": "Role Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RoleUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Role",
         "tags": [
           "roles"
         ]
@@ -6023,149 +5541,6 @@
           }
         },
         "summary": "Enable User",
-        "tags": [
-          "users"
-        ]
-      }
-    },
-    "/api/v1/users/{user_id}/roles": {
-      "get": {
-        "description": "List the access roles currently granted to a console account.",
-        "operationId": "list_user_roles_api_v1_users__user_id__roles_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "user_id",
-            "required": true,
-            "schema": {
-              "title": "User Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/RoleAssignmentOut"
-                  },
-                  "title": "Response List User Roles Api V1 Users  User Id  Roles Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List User Roles",
-        "tags": [
-          "users"
-        ]
-      },
-      "post": {
-        "description": "Grant (provision) an access role to a console account.",
-        "operationId": "grant_user_role_api_v1_users__user_id__roles_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "user_id",
-            "required": true,
-            "schema": {
-              "title": "User Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RoleGrant"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleAssignmentOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Grant User Role",
-        "tags": [
-          "users"
-        ]
-      }
-    },
-    "/api/v1/users/{user_id}/roles/{role_id}": {
-      "delete": {
-        "description": "Revoke (deprovision) an access role from a console account.",
-        "operationId": "revoke_user_role_api_v1_users__user_id__roles__role_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "user_id",
-            "required": true,
-            "schema": {
-              "title": "User Id",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "path",
-            "name": "role_id",
-            "required": true,
-            "schema": {
-              "title": "Role Id",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Revoke User Role",
         "tags": [
           "users"
         ]
