@@ -101,6 +101,12 @@
           </svg>
           Connector Schema
         </a>
+        <a href="/ui/admin/governance" class="sidebar__link {% if active_section == 'governance' %}is-active{% endif %}">
+          <svg class="sidebar__link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 1.5l5.5 2.5v3.5c0 3-2.3 5-5.5 5.5-3.2-.5-5.5-2.5-5.5-5.5V4z"/><path d="M5.8 8l1.6 1.6L10.4 6.5"/>
+          </svg>
+          User Governance
+        </a>
         <a href="/ui/settings" class="sidebar__link {% if active_section == 'settings' or request.url.path.startswith('/ui/settings') %}is-active{% endif %}">
           <svg class="sidebar__link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <circle cx="8" cy="8" r="2"/>

@@ -40,6 +40,17 @@ access) are gone.
   **Users** (add a user with a role, or change a user's role). The old
   Assignments and role-editor pages were removed.
 
+### Added
+
+- **User Governance page** (Admin → **User Governance**, `/ui/admin/governance`).
+  The IGA counterpart to the employee Connector Schema: a single reference of
+  everything needed to govern console **users** — the lifecycle operations
+  (create, update, change role, disable/enable, list roles), the account
+  attributes (with access/required/updatable flags), the role entitlement
+  catalog, and the governance rules (disable-not-delete, seeded-admin
+  protections, single-valued roles) — with **JSON** and **CSV** downloads to
+  hand to a connector builder such as Saviynt. Admin-only; exports are audited.
+
 ## [1.7.2] — 2026-08-07
 
 ### Fixed

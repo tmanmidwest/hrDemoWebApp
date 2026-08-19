@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% set page_title = "User Governance" %}
+{% block breadcrumb %}<span>Admin</span> <span class="topbar__breadcrumb-sep">/</span> <span>User Governance</span>{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">User governance</h1>
+    <p class="page-header__subtitle">
+      Everything an IGA platform (e.g. Saviynt) needs to govern <strong>console users</strong> of this app —
+      create, update, disable/enable an account, read the role catalog, and change a user's role.
+      Hand the JSON to your connector builder.
+    </p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/admin/governance/export.csv" class="btn btn--secondary">Download CSV</a>
+    <a href="/ui/admin/governance/export.json" class="btn btn--primary">Download JSON</a>
+  </div>
+</div>
+
+<div class="di-stats" style="grid-template-columns: repeat(4, 1fr); max-width: 720px;">
+  <div class="di-stat"><span class="di-stat__v">{{ schema.operations | length }}</span><span class="di-stat__k">Operations</span></div>
+  <div class="di-stat"><span class="di-stat__v">{{ schema.account_attributes | length }}</span><span class="di-stat__k">Attributes</span></div>
+  <div class="di-stat"><span class="di-stat__v">{{ schema.entitlements.roles | length }}</span><span class="di-stat__k">Roles</span></div>
+  <div class="di-stat"><span class="di-stat__v">{{ schema.instance.active_account_count }}</span><span class="di-stat__k">Active accounts</span></div>
+</div>
+
+<div class="callout" style="max-width: 900px; margin-bottom: var(--s-5);">
+  <span class="ic">→</span>
+  <div>
+    All calls are under <span class="mono">{{ schema.auth.base_path }}</span> and take a bearer token
+    (API key or OAuth2 client-credentials). Mint a key with the
+    <span class="mono">{{ schema.auth.recommended_key_preset }}</span> preset on the
+    <a href="/ui/settings/api-keys">API Keys</a> page. This governs login accounts — for the employee
+    <em>data</em> surface, see the <a href="/ui/admin/schema">Connector Schema</a>.
+  </div>
+</div>
+
+<!-- Lifecycle operations -->
+<h2 class="text-sm" style="margin: var(--s-5) 0 var(--s-3); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Lifecycle operations</h2>
+<div class="card card--flush">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Scope</th>
+          <th>Body</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for op in schema.operations %}
+        <tr>
+          <td>{{ op.action }}</td>
+          <td><span class="badge badge--neutral">{{ op.method }}</span></td>
+          <td class="mono text-xs">{{ op.path }}</td>
+          <td class="mono text-xs">{{ op.scope }}</td>
+          <td class="text-xs text-muted">
+            {% if op.request_body %}
+              {% for k, v in op.request_body.items() %}<div><span class="mono">{{ k }}</span>: {{ v }}</div>{% endfor %}
+            {% else %}<span class="text-faint">—</span>{% endif %}
+          </td>
+          <td class="text-xs text-muted">{{ op.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Account attributes -->
+<h2 class="text-sm" style="margin: var(--s-6) 0 var(--s-3); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Account attributes</h2>
+<div class="card card--flush">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Attribute</th>
+          <th>Type</th>
+          <th>Access</th>
+          <th>On create</th>
+          <th>Updatable</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in schema.account_attributes %}
+        <tr>
+          <td class="mono">{{ a.name }}</td>
+          <td class="mono text-xs">{{ a.type }}</td>
+          <td>
+            {% if a.access == 'read-only' %}<span class="text-faint text-xs">read-only</span>
+            {% elif a.access == 'write-only' %}<span class="badge badge--neutral">write-only</span>
+            {% else %}<span class="badge badge--success">read-write</span>{% endif %}
+          </td>
+          <td>{% if a.required_on_create %}<span class="badge badge--neutral">required</span>{% else %}<span class="text-faint">—</span>{% endif %}</td>
+          <td>{% if a.updatable %}<span class="text-faint">yes</span>{% else %}<span class="text-faint">no</span>{% endif %}</td>
+          <td class="text-xs text-muted">{{ a.description }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Entitlements / roles -->
+<h2 class="text-sm" style="margin: var(--s-6) 0 var(--s-3); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Roles (entitlements)</h2>
+<div class="callout" style="max-width: 900px; margin-bottom: var(--s-4);">
+  <span class="ic">→</span>
+  <div>
+    Single-valued: each account holds one role. Read the catalog at
+    <span class="mono">{{ schema.entitlements.catalog_endpoint }}</span>; assign with
+    <span class="mono">{{ schema.entitlements.assign_via }}</span>.
+  </div>
+</div>
+<div class="di-chips">
+  {% for r in schema.entitlements.roles %}
+  <span class="di-chip"><b>{{ r.id }}</b> = {{ r.name }}</span>
+  {% endfor %}
+</div>
+
+<!-- Governance rules -->
+<h2 class="text-sm" style="margin: var(--s-6) 0 var(--s-3); color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;">Governance rules</h2>
+<div class="card">
+  <ul style="margin: 0; padding-left: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2);">
+    {% for note in schema.notes %}
+    <li class="text-sm text-muted">{{ note }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
