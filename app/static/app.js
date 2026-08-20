@@ -147,3 +147,26 @@ if (themeToggle) {
     } catch (e) {}
   });
 }
+
+// User account menu (topbar dropdown): toggle on click, close on outside click.
+const userMenu = document.getElementById('user-menu');
+if (userMenu) {
+  const trigger = userMenu.querySelector('.user-menu__trigger');
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = userMenu.classList.toggle('is-open');
+    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', (e) => {
+    if (!userMenu.contains(e.target)) {
+      userMenu.classList.remove('is-open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      userMenu.classList.remove('is-open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+  });
+}

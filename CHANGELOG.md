@@ -6,6 +6,17 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; changes are backward-compatible
 unless a **Breaking** section says otherwise.
 
+## [1.9.0] — 2026-08-20
+
+### Added
+
+- **Self-service “Change password.”** The username in the top-right is now a menu
+  with **Change password** and **Sign out**. Change password opens a dedicated
+  screen (`/ui/account/password`) available to **any** signed-in user regardless
+  of role; it requires re-entering the current password, and the value is never
+  logged. SSO-provisioned accounts (no local password) are shown a notice
+  directing them to their identity provider instead.
+
 ## [1.8.0] — 2026-08-19
 
 Roles are now a **single concept**. A console account's role — **View Only /

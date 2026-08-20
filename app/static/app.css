@@ -311,6 +311,98 @@ code, kbd, .mono { font-family: var(--font-mono); font-size: 0.92em; }
   font-weight: 500;
 }
 
+/* User account menu (topbar) */
+.user-menu {
+  position: relative;
+}
+
+.user-menu__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 6px var(--s-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.user-menu__trigger:hover,
+.user-menu.is-open .user-menu__trigger {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.user-menu__caret {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.user-menu.is-open .user-menu__caret {
+  transform: rotate(180deg);
+}
+
+.user-menu__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--s-2);
+  min-width: 200px;
+  z-index: 20;
+  display: none;
+}
+
+.user-menu.is-open .user-menu__menu {
+  display: block;
+}
+
+.user-menu__header {
+  padding: 6px var(--s-3) var(--s-2);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--s-2);
+}
+
+.user-menu__name {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.user-menu__role {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.user-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px var(--s-3);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.user-menu__item:hover {
+  background: var(--surface-2);
+}
+
+.user-menu__item--button {
+  background: transparent;
+  border: none;
+  font: inherit;
+}
+
 .main {
   grid-area: main;
   padding: var(--s-8);
