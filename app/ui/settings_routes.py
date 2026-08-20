@@ -211,7 +211,9 @@ def create_admin(
         target_id=new_user.id,
         target_label=username,
         message=f"Created user '{username}' ({new_user.role_label})",
-        detail={"role": role},
+        # `password_set` records only THAT a credential was provisioned, never
+        # the value. Always true here — a password is required to create a user.
+        detail={"role": role, "password_set": True},
     )
     flash(request, f"User '{username}' created ({new_user.role_label}).", "success")
     return RedirectResponse(url="/ui/settings/admin-users", status_code=303)

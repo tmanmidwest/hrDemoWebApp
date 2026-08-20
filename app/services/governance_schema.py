@@ -112,6 +112,10 @@ _NOTES: list[str] = [
     "Usernames are unique; creating or renaming to a taken username returns 409.",
     "All write operations require the users:write scope; reading the role catalog "
     "requires roles:read.",
+    "Every lifecycle call is written to the activity log. Credential handling is "
+    "auditable but privacy-preserving: create records a password_set flag and an "
+    "update lists 'password' among its changed fields to show THAT a credential "
+    "was provisioned — the password value itself is never logged.",
 ]
 
 

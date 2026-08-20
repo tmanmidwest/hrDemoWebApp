@@ -47,6 +47,37 @@ def test_get_user_404(api_client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Audit: credential provisioning is flagged, but never the value
+# ---------------------------------------------------------------------------
+
+
+def test_create_audit_flags_password_without_leaking_it(api_client: TestClient) -> None:
+    secret = "sup3rsecretpw!"
+    resp = api_client.post(
+        USERS, json={"username": "cred_user", "password": secret, "role": "view_only"}
+    )
+    assert resp.status_code == 201, resp.text
+
+    from app.db import get_session_factory
+    from app.models.audit_event import AuditEvent
+
+    with get_session_factory()() as db:
+        event = (
+            db.query(AuditEvent)
+            .filter(
+                AuditEvent.event_type == "app_user.created",
+                AuditEvent.target_label == "cred_user",
+            )
+            .one()
+        )
+        # The event explicitly records THAT a credential was set...
+        assert event.detail.get("password_set") is True
+        # ...but the plaintext password appears nowhere in the audit row.
+        assert secret not in (event.detail_json or "")
+        assert secret not in (event.message or "")
+
+
+# ---------------------------------------------------------------------------
 # Create
 # ---------------------------------------------------------------------------
 

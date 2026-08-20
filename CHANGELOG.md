@@ -50,6 +50,11 @@ access) are gone.
   catalog, and the governance rules (disable-not-delete, seeded-admin
   protections, single-valued roles) — with **JSON** and **CSV** downloads to
   hand to a connector builder such as Saviynt. Admin-only; exports are audited.
+- **Credential provisioning is now visible in the activity log.** A user-created
+  event records a `password_set` flag, so you can confirm from the log that a
+  credential was set on creation (an update already lists `password` among its
+  changed fields). The password **value** is never logged — only the fact that
+  one was provided.
 
 ## [1.7.2] — 2026-08-07
 

@@ -98,7 +98,9 @@ def create_user(
         target_id=user.id,
         target_label=user.username,
         message=f"Created user '{user.username}' ({user.role_label})",
-        detail={"surface": "api", "role": user.role},
+        # `password_set` records only THAT a credential was provisioned, never
+        # the value. Always true here — the API requires a password on create.
+        detail={"surface": "api", "role": user.role, "password_set": True},
         request=request,
     )
     return user
