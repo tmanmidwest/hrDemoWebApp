@@ -53,6 +53,59 @@ def build_client(provider: AuthProvider) -> Any:
     return oauth.create_client(provider.slug)
 
 
+_DOMAIN_SPLIT = re.compile(r"[,\s]+")
+
+
+def parse_allowed_domains(raw: str | None) -> list[str]:
+    """Split a stored allowlist string into normalized, lowercase domains.
+
+    Accepts commas and/or whitespace as separators and tolerates a leading "@"
+    on each entry (so "@saviynt.com" and "saviynt.com" both work).
+    """
+    if not raw:
+        return []
+    out = []
+    for part in _DOMAIN_SPLIT.split(raw.strip()):
+        cleaned = part.strip().lower().lstrip("@")
+        if cleaned:
+            out.append(cleaned)
+    return out
+
+
+def _claim_domain(claims: dict[str, Any]) -> str | None:
+    """The domain to check against the allowlist for a set of OIDC claims.
+
+    Prefers Google's `hd` (hosted-domain) claim — present only for Google
+    Workspace accounts and the authoritative signal of org membership — and
+    falls back to the domain portion of the `email` claim.
+    """
+    hd = claims.get("hd")
+    if hd:
+        return str(hd).strip().lower()
+    email = claims.get("email")
+    if email and "@" in email:
+        return email.rsplit("@", 1)[1].strip().lower()
+    return None
+
+
+def domain_allowed(provider: AuthProvider, claims: dict[str, Any]) -> bool:
+    """Whether an authenticated subject may sign in, per the provider allowlist.
+
+    Returns True when no allowlist is configured (backward-compatible: any
+    authenticated user is accepted). When an allowlist is set, the subject's
+    hosted/email domain must be on it. When the decision rests on the email
+    domain (no `hd` claim) and the IdP explicitly marks the email unverified,
+    it's rejected — an unverified email domain can't be trusted.
+    """
+    allowed = parse_allowed_domains(provider.allowed_domains)
+    if not allowed:
+        return True
+    if not claims.get("hd") and claims.get("email_verified") is False:
+        return False
+    domain = _claim_domain(claims)
+    return domain in allowed if domain else False
+
+
 def callback_url(request: Request, slug: str) -> str:
     """Build the absolute redirect URI for a provider's callback.
 

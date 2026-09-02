@@ -83,6 +83,19 @@
     </div>
 
     <div class="form-row">
+      <label class="label" for="allowed_domains">Allowed email domains</label>
+      <input class="input mono" id="allowed_domains" name="allowed_domains" maxlength="500"
+             value="{{ form.allowed_domains or '' }}" placeholder="e.g. saviynt.com" />
+      <div class="form-hint">
+        Optional. Comma-separated. When set, only users whose Google Workspace
+        hosted domain (<code>hd</code>) or verified email domain matches may sign
+        in — everyone else is rejected and the attempt is logged. Leave blank to
+        allow any account from this provider. <strong>Leaving it blank with a
+        public provider like Google lets anyone with a Google account in.</strong>
+      </div>
+    </div>
+
+    <div class="form-row">
       <label class="label" style="display:flex; align-items:center; gap: var(--s-2); cursor:pointer;">
         <input type="checkbox" name="is_enabled" value="1" {{ "checked" if form.is_enabled else "" }} />
         Enabled (show on login page)

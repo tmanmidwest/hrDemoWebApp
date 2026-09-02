@@ -35,7 +35,7 @@ from app.services import (
 )
 from app.services import scopes as scope_service
 from app.services.audit import prune_old_events, record_event
-from app.services.oidc import callback_url
+from app.services.oidc import callback_url, parse_allowed_domains
 from app.services.passwords import hash_password
 from app.services.secret_box import encrypt_secret
 from app.services.tokens import (
@@ -915,6 +915,19 @@ def show_new_auth_provider(
     )
 
 
+def _normalize_allowed_domains(raw: str) -> str:
+    """Clean the allowed-domains field into a canonical, comma-separated string.
+
+    Lowercases, strips a leading "@", drops blanks/duplicates, and preserves
+    order. Stored empty when nothing valid is given (meaning no restriction).
+    """
+    seen: list[str] = []
+    for domain in parse_allowed_domains(raw):
+        if domain not in seen:
+            seen.append(domain)
+    return ", ".join(seen)
+
+
 def _validate_provider_form(
     slug: str, display_name: str, issuer_url: str, client_id: str
 ) -> str | None:
@@ -939,6 +952,7 @@ def create_auth_provider(
     client_id: str = Form(...),
     client_secret: str = Form(""),
     scopes: str = Form(DEFAULT_SCOPES),
+    allowed_domains: str = Form(""),
     is_enabled: str | None = Form(None),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
@@ -948,6 +962,7 @@ def create_auth_provider(
     issuer_url = issuer_url.strip()
     client_id = client_id.strip()
     scopes = scopes.strip() or DEFAULT_SCOPES
+    allowed_domains = _normalize_allowed_domains(allowed_domains)
 
     form = {
         "display_name": display_name,
@@ -955,6 +970,7 @@ def create_auth_provider(
         "issuer_url": issuer_url,
         "client_id": client_id,
         "scopes": scopes,
+        "allowed_domains": allowed_domains,
         "is_enabled": bool(is_enabled),
     }
 
@@ -978,6 +994,7 @@ def create_auth_provider(
         client_id=client_id,
         client_secret_encrypted=encrypt_secret(client_secret) if client_secret else "",
         scopes=scopes,
+        allowed_domains=allowed_domains,
         is_enabled=bool(is_enabled),
         created_by_user_id=user.id,
     )
@@ -1008,7 +1025,7 @@ def create_auth_provider(
         target_id=provider.id,
         target_label=display_name,
         message=f"Created identity provider '{display_name}'",
-        detail={"slug": slug, "issuer_url": issuer_url},
+        detail={"slug": slug, "issuer_url": issuer_url, "allowed_domains": allowed_domains},
     )
     flash(request, f"Identity provider '{display_name}' created.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)
@@ -1030,6 +1047,7 @@ def show_edit_auth_provider(
         "issuer_url": provider.issuer_url,
         "client_id": provider.client_id,
         "scopes": provider.scopes,
+        "allowed_domains": provider.allowed_domains,
         "is_enabled": provider.is_enabled,
     }
     return render(
@@ -1053,6 +1071,7 @@ def update_auth_provider(
     client_id: str = Form(...),
     client_secret: str = Form(""),
     scopes: str = Form(DEFAULT_SCOPES),
+    allowed_domains: str = Form(""),
     is_enabled: str | None = Form(None),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
@@ -1066,6 +1085,7 @@ def update_auth_provider(
     issuer_url = issuer_url.strip()
     client_id = client_id.strip()
     scopes = scopes.strip() or DEFAULT_SCOPES
+    allowed_domains = _normalize_allowed_domains(allowed_domains)
 
     form = {
         "display_name": display_name,
@@ -1073,6 +1093,7 @@ def update_auth_provider(
         "issuer_url": issuer_url,
         "client_id": client_id,
         "scopes": scopes,
+        "allowed_domains": allowed_domains,
         "is_enabled": bool(is_enabled),
     }
 
@@ -1094,6 +1115,7 @@ def update_auth_provider(
     provider.issuer_url = issuer_url
     provider.client_id = client_id
     provider.scopes = scopes
+    provider.allowed_domains = allowed_domains
     provider.is_enabled = bool(is_enabled)
     # Only replace the stored secret when a new one is supplied.
     if client_secret:
@@ -1125,7 +1147,11 @@ def update_auth_provider(
         target_id=provider.id,
         target_label=display_name,
         message=f"Updated identity provider '{display_name}'",
-        detail={"slug": slug, "secret_rotated": bool(client_secret)},
+        detail={
+            "slug": slug,
+            "secret_rotated": bool(client_secret),
+            "allowed_domains": allowed_domains,
+        },
     )
     flash(request, f"Identity provider '{display_name}' updated.", "success")
     return RedirectResponse(url="/ui/settings/auth-providers", status_code=303)

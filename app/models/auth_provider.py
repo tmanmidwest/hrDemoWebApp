@@ -38,6 +38,11 @@ class AuthProvider(Base, TimestampMixin):
     # Fernet-encrypted; may be empty for public (PKCE-only) clients.
     client_secret_encrypted: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
     scopes: Mapped[str] = mapped_column(String(255), nullable=False, default=DEFAULT_SCOPES)
+    # Optional comma/space-separated allowlist of email domains (e.g.
+    # "saviynt.com"). When non-empty, only authenticated users whose hosted
+    # domain (`hd` claim) or verified email domain is on the list may sign in.
+    # Empty means no restriction — any authenticated user is accepted.
+    allowed_domains: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         ForeignKey("app_users.id"), nullable=True

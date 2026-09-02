@@ -20,7 +20,12 @@ from app.db import get_db
 from app.models import AuthProvider
 from app.services.audit import record_event
 from app.services.auth import SESSION_USER_ID_KEY, SESSION_USERNAME_KEY
-from app.services.oidc import build_client, callback_url, find_or_create_user
+from app.services.oidc import (
+    build_client,
+    callback_url,
+    domain_allowed,
+    find_or_create_user,
+)
 from app.ui.flash import flash
 
 
@@ -133,8 +138,52 @@ async def oidc_callback(
         flash(request, "The identity provider did not return a usable profile.", "error")
         return RedirectResponse(url="/ui/login", status_code=303)
 
+    claim_dict = dict(claims)
+    if not domain_allowed(provider, claim_dict):
+        # Enforce the per-provider email-domain allowlist BEFORE provisioning,
+        # so a disallowed account is never JIT-created. Record the attempted
+        # domain/email for security review.
+        attempted_email = claim_dict.get("email")
+        attempted_domain = claim_dict.get("hd") or (
+            attempted_email.rsplit("@", 1)[1]
+            if attempted_email and "@" in attempted_email
+            else None
+        )
+        log.warning(
+            "oidc_domain_blocked",
+            extra={"provider": slug, "domain": attempted_domain},
+        )
+        record_event(
+            category="oidc",
+            event_type="oidc.sso.domain_blocked",
+            outcome="failure",
+            actor_type="idp",
+            actor_label=slug,
+            target_type="auth_provider",
+            target_label=slug,
+            message=(
+                f"Blocked OIDC sign-in via '{slug}': email domain "
+                f"'{attempted_domain}' is not on the allowlist"
+            ),
+            detail={
+                "provider": slug,
+                "reason": "domain_not_allowed",
+                "attempted_domain": attempted_domain,
+                "attempted_email": attempted_email,
+                "allowed_domains": provider.allowed_domains,
+            },
+            request=request,
+        )
+        flash(
+            request,
+            f"Your account's email domain is not permitted to sign in with "
+            f"{provider.display_name}. Contact an administrator.",
+            "error",
+        )
+        return RedirectResponse(url="/ui/login", status_code=303)
+
     try:
-        user = find_or_create_user(db, provider, dict(claims))
+        user = find_or_create_user(db, provider, claim_dict)
     except Exception:
         db.rollback()
         # Most often: the password_hash-nullable migration (0003) didn't run, or

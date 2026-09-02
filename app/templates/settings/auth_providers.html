@@ -29,6 +29,7 @@
       <th>Slug</th>
       <th>Issuer</th>
       <th>Redirect URI (register at IdP)</th>
+      <th>Access</th>
       <th>Status</th>
       <th style="text-align:right;">Actions</th>
     </tr>
@@ -40,6 +41,13 @@
       <td class="mono text-muted">{{ p.slug }}</td>
       <td class="mono text-muted">{{ p.issuer_url }}</td>
       <td class="mono text-muted" style="word-break: break-all;">{{ redirect_uris[p.id] }}</td>
+      <td>
+        {% if p.allowed_domains %}
+          <span class="badge badge--neutral" title="Only these email domains may sign in">{{ p.allowed_domains }}</span>
+        {% else %}
+          <span class="badge badge--warning" title="Any account from this provider can sign in">Any account</span>
+        {% endif %}
+      </td>
       <td>
         {% if p.is_enabled %}<span class="badge badge--success">Enabled</span>
         {% else %}<span class="badge badge--neutral">Disabled</span>{% endif %}
