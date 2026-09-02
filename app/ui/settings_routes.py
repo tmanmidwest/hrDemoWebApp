@@ -1234,6 +1234,8 @@ def _get_or_create_branding(db: Session) -> AppBranding:
             brand_name=branding_service.DEFAULT_NAME,
             brand_color="",
             icon_key=branding_service.DEFAULT_ICON,
+            brand_tagline=branding_service.DEFAULT_TAGLINE,
+            brand_banner="",
         )
         db.add(branding)
         db.commit()
@@ -1256,6 +1258,8 @@ def show_branding(
             "brand_name": branding.brand_name,
             "brand_color": branding.brand_color or branding_service.DEFAULT_COLOR,
             "icon_key": branding.icon_key,
+            "brand_tagline": branding.brand_tagline,
+            "brand_banner": branding.brand_banner,
         },
         icon_presets=branding_service.ICON_PRESETS,
         default_color=branding_service.DEFAULT_COLOR,
@@ -1268,17 +1272,23 @@ def update_branding(
     brand_name: str = Form(...),
     brand_color: str = Form(""),
     icon_key: str = Form(...),
+    brand_tagline: str = Form(""),
+    brand_banner: str = Form(""),
     db: Session = Depends(get_db),
     user: AppUser = Depends(require_admin),
 ) -> Response:
     brand_name = brand_name.strip()
     brand_color = brand_color.strip()
     icon_key = icon_key.strip()
+    brand_tagline = brand_tagline.strip()
+    brand_banner = brand_banner.strip()
 
     form = {
         "brand_name": brand_name,
         "brand_color": brand_color or branding_service.DEFAULT_COLOR,
         "icon_key": icon_key,
+        "brand_tagline": brand_tagline,
+        "brand_banner": brand_banner,
     }
 
     def _reject(message: str) -> Response:
@@ -1301,6 +1311,10 @@ def update_branding(
         return _reject("Color must be a hex value like #1e293b.")
     if icon_key not in branding_service.ICON_PRESETS:
         return _reject("Please choose one of the available icons.")
+    if len(brand_tagline) > 120:
+        return _reject("Sub-text must be 120 characters or fewer.")
+    if len(brand_banner) > 200:
+        return _reject("Top banner text must be 200 characters or fewer.")
 
     # Store empty when the color matches the theme default so the app keeps
     # following the theme rather than pinning to a now-stale hex.
@@ -1311,6 +1325,8 @@ def update_branding(
     branding.brand_name = brand_name
     branding.brand_color = brand_color
     branding.icon_key = icon_key
+    branding.brand_tagline = brand_tagline
+    branding.brand_banner = brand_banner
     db.commit()
     branding_service.invalidate()
 
@@ -1325,7 +1341,12 @@ def update_branding(
         target_type="branding",
         target_label=brand_name,
         message=f"Updated branding to '{brand_name}'",
-        detail={"icon_key": icon_key, "has_color": bool(brand_color)},
+        detail={
+            "icon_key": icon_key,
+            "has_color": bool(brand_color),
+            "has_tagline": bool(brand_tagline),
+            "has_banner": bool(brand_banner),
+        },
     )
     flash(request, "Branding updated.", "success")
     return RedirectResponse(url="/ui/settings/branding", status_code=303)

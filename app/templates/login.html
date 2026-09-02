@@ -35,6 +35,8 @@
 </head>
 <body>
 
+  {# The system banner is intentionally NOT shown here — it's an
+     authenticated-only "which instance am I connected to" notice. #}
   <button type="button" id="theme-toggle" class="btn btn--ghost btn--sm theme-toggle theme-toggle--fixed"
           aria-label="Toggle dark mode" title="Toggle dark mode">
     <svg class="theme-toggle__icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -112,9 +114,11 @@
       </form>
       {% endif %}
 
+      {% if branding.tagline %}
       <div style="margin-top: var(--s-8); text-align: center;">
-        <div class="auth-card__mark">POC · non-production</div>
+        <div class="auth-card__mark">{{ branding.tagline }}</div>
       </div>
+      {% endif %}
     </div>
   </div>
 

@@ -44,6 +44,22 @@
     </div>
 
     <div class="form-row">
+      <label class="label" for="brand_tagline">Sub-text</label>
+      <input class="input" id="brand_tagline" name="brand_tagline" maxlength="120"
+             value="{{ form.brand_tagline if form.brand_tagline is not none else '' }}"
+             placeholder="e.g. POC · non-production" />
+      <div class="form-hint">Small line under the brand name in the sidebar and login card. Leave blank to hide it.</div>
+    </div>
+
+    <div class="form-row">
+      <label class="label" for="brand_banner">Top banner</label>
+      <input class="input" id="brand_banner" name="brand_banner" maxlength="200"
+             value="{{ form.brand_banner or '' }}"
+             placeholder="e.g. This system is linked to the Healthcare instance of Saviynt" />
+      <div class="form-hint">A notice bar shown centered across the top of every screen. Leave blank to hide it.</div>
+    </div>
+
+    <div class="form-row">
       <label class="label" for="brand_color_hex">Accent color</label>
       <div style="display:flex; align-items:center; gap:var(--s-3);">
         <input type="color" id="brand_color" name="brand_color" value="{{ form.brand_color }}"

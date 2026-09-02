@@ -43,7 +43,11 @@
   </div>
   {% endif %}
 
-  <div class="app-shell">
+  <div class="app-shell{% if branding.banner %} app-shell--banner{% endif %}">
+
+    {% if branding.banner %}
+    <div class="app-banner"{% if branding.color %} style="--banner-accent: {{ branding.color }};"{% endif %}>{{ branding.banner }}</div>
+    {% endif %}
 
     <aside class="sidebar">
       <div class="sidebar__brand">
@@ -53,7 +57,7 @@
                style="color: {{ branding.color or 'var(--primary)' }};">{{ branding.icon_svg | safe }}</svg>
           <div class="sidebar__brand-name"{% if branding.color %} style="color: {{ branding.color }};"{% endif %}>{{ branding.name }}</div>
         </div>
-        <div class="sidebar__brand-tagline">POC · non-production</div>
+        {% if branding.tagline %}<div class="sidebar__brand-tagline">{{ branding.tagline }}</div>{% endif %}
       </div>
 
       <nav class="sidebar__nav">

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 from app.models._mixins import TimestampMixin
-from app.services.branding import DEFAULT_ICON, DEFAULT_NAME
+from app.services.branding import DEFAULT_ICON, DEFAULT_NAME, DEFAULT_TAGLINE
 
 # The singleton row always uses this primary key.
 BRANDING_ID = 1
@@ -33,6 +33,12 @@ class AppBranding(Base, TimestampMixin):
     icon_key: Mapped[str] = mapped_column(
         String(50), nullable=False, default=DEFAULT_ICON
     )
+    # Sub-text shown under the brand name (sidebar + login). Empty = hidden.
+    brand_tagline: Mapped[str] = mapped_column(
+        String(120), nullable=False, default=DEFAULT_TAGLINE
+    )
+    # System-wide notice banner across the top of every screen. Empty = hidden.
+    brand_banner: Mapped[str] = mapped_column(String(200), nullable=False, default="")
 
     def __repr__(self) -> str:
         return f"<AppBranding name={self.brand_name!r} icon={self.icon_key!r}>"
