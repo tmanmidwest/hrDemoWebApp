@@ -54,6 +54,7 @@ variables (used only by `docker-compose.yml`) support side-by-side stacks:
 |---|---|---|
 | `HRMCP_HOST_PORT` | `8100` | **Inbound/published port** — the one clients connect to |
 | `HRMCP_CONTAINER_NAME` | `demo-hr-mcp` | Container name |
+| `HRMCP_IMAGE` | `demo-hr-mcp:local` | Image tag — give each stack its own to update/remove one in isolation |
 
 The server itself reads these `HRMCP_`-prefixed variables:
 
@@ -105,7 +106,7 @@ The included [`docker-compose.yml`](../docker-compose.yml) builds from source (`
 services:
   hr-sot:
     build: .
-    image: demo-hr-sot:local
+    image: ${HRSOT_IMAGE:-demo-hr-sot:local}   # per-stack tag; unset = shared default
     container_name: ${HRSOT_CONTAINER_NAME:-demo-hr-sot}
     ports:
       - "${HRSOT_HOST_PORT:-8000}:8000"
@@ -130,7 +131,7 @@ services:
     build:
       context: .
       dockerfile: mcp_server/Dockerfile
-    image: demo-hr-mcp:local
+    image: ${HRMCP_IMAGE:-demo-hr-mcp:local}   # per-stack tag; unset = shared default
     container_name: ${HRMCP_CONTAINER_NAME:-demo-hr-mcp}
     depends_on:
       hr-sot:
@@ -201,7 +202,7 @@ The bundled compose publishes each host port via a variable — `"${HRSOT_HOST_P
 
 Each container still listens on its default port internally (so the healthchecks are unaffected); only the host-side mapping changes. The app is then reachable at `http://<docker-host>:8080` and the MCP endpoint at `http://<docker-host>:8180/mcp`. These are Compose substitution variables — they have no effect unless the repo's `docker-compose.yml` references them, which it does on `main`.
 
-The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags the result `demo-hr-sot:local`, persists `/data` to a **named volume** (`hrsot-data`), and sets `restart: unless-stopped` with the `/health` healthcheck. The named volume is important: the container runs as the non-root `hrsot` user (uid/gid 1000), and a fresh named volume inherits the image's `/data` ownership so the app can write its database and session secret. A host bind mount would be created root-owned and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`. Portainer creates and manages the `hrsot-data` volume for you; browse or back it up under **Volumes**.
+The bundled [`docker-compose.yml`](../docker-compose.yml) uses `build: .`, tags the result `${HRSOT_IMAGE:-demo-hr-sot:local}` (overridable — see [Running several instances on one Docker host](#running-several-instances-on-one-docker-host)), persists `/data` to a **named volume** (`hrsot-data`), and sets `restart: unless-stopped` with the `/health` healthcheck. The named volume is important: the container runs as the non-root `hrsot` user (uid/gid 1000), and a fresh named volume inherits the image's `/data` ownership so the app can write its database and session secret. A host bind mount would be created root-owned and fail with `PermissionError: [Errno 13] Permission denied: '/data/session_secret'`. Portainer creates and manages the `hrsot-data` volume for you; browse or back it up under **Volumes**.
 
 > **Requires a buildable host.** This builds the image on the Docker engine Portainer manages, so that engine must support image builds — true for a standard standalone Docker host. Portainer **Edge agents** and some restricted/Swarm setups disable in-stack builds; on those, mirror the image into a registry and use [Using a prebuilt image](#using-a-prebuilt-image-optional).
 
@@ -222,7 +223,9 @@ Instead of adding variables one row at a time, click **Advanced mode** in the st
 The block below lists **every** variable the bundled `docker-compose.yml` reads, with its default. Uncomment (remove the leading `#`) and edit only the lines you want to change — anything left commented falls back to the built-in default, so you never have to fill in all of them:
 
 ```dotenv
-# ── Compose substitution (ports / names / MCP endpoint path) ──────────────
+# ── Compose substitution (image tags / ports / names / MCP endpoint path) ──
+# HRSOT_IMAGE=demo-hr-sot:local      # app image tag — give each stack its own
+# HRMCP_IMAGE=demo-hr-mcp:local      # MCP image tag — give each stack its own
 # HRSOT_HOST_PORT=8000               # host port the app is published on
 # HRSOT_CONTAINER_NAME=demo-hr-sot   # app container name
 # HRMCP_HOST_PORT=8100               # host port the MCP server is published on
@@ -330,21 +333,24 @@ The [MCP server](MCP.md) (`hr-mcp`) lets an AI assistant query HR data and run r
 
 With Docker Compose it comes up automatically alongside the app (see [Docker Compose](#docker-compose)); the endpoint is `http://<host>:8100/mcp`. It returns **503 until you generate a gateway token**, so it's safe to deploy first. Then, in **Settings → MCP**: click *Generate API token* (outbound), add a *Gateway token* (inbound), and point your client at the URL with `Authorization: Bearer hrsotgw_...`. Full setup and client-config examples are in [MCP.md](MCP.md).
 
-### Running dev and prod on one Docker host
+### Running several instances on one Docker host
 
-Every port and container name is overridable, so a dev stack and a prod stack can coexist on the same host without collisions. Give each stack its own Compose project name (`-p`) and non-overlapping host ports:
+Every image tag, port, and container name is overridable, so multiple stacks (dev + prod, or one per customer) can coexist on the same host without collisions. Give each stack its own Compose project name (`-p`), image tags, and non-overlapping host ports:
 
 ```bash
-# prod (defaults): app :8000, mcp :8100
+# prod (defaults): app :8000, mcp :8100, images demo-hr-sot:local / demo-hr-mcp:local
 docker compose -p hrsot-prod up -d --build
 
-# dev: app :9000, mcp :9100, distinct container names
-HRSOT_HOST_PORT=9000 HRSOT_CONTAINER_NAME=dev-hr-sot \
-HRMCP_HOST_PORT=9100 HRMCP_CONTAINER_NAME=dev-hr-mcp \
-docker compose -p hrsot-dev up -d --build
+# acme: app :9000, mcp :9100, distinct container names AND image tags
+HRSOT_IMAGE=demo-hr-sot:acme HRMCP_IMAGE=demo-hr-mcp:acme \
+HRSOT_HOST_PORT=9000 HRSOT_CONTAINER_NAME=acme-hr-sot \
+HRMCP_HOST_PORT=9100 HRMCP_CONTAINER_NAME=acme-hr-mcp \
+docker compose -p hrsot-acme up -d --build
 ```
 
 `HRMCP_HOST_PORT` is the inbound port each stack publishes — give each stack a different value (here `8100` vs `9100`) and they won't collide. Each project also gets its own network, so within each one `hr-mcp` still resolves the app as `http://hr-sot:8000` regardless of the overridden container names. Other server settings (`HRMCP_PATH`, `HRMCP_HR_API_BASE_URL`, …) from the [environment variables](#mcp-server-hr-mcp-optional) table are honored too if you need to change the endpoint path or upstream URL.
+
+**Give each stack its own image tag** (`HRSOT_IMAGE` / `HRMCP_IMAGE`) when you want to build, update, or remove *one* instance's image without touching the others. Because `build: .` and `image:` are both set, `--build` tags that stack's freshly built image with the name you chose (e.g. `demo-hr-sot:acme`), so `docker image rm demo-hr-sot:acme` — or *Remove* on just that image in Portainer — affects only that instance. Left unset, every stack shares the default `demo-hr-sot:local` tag and they can't be told apart. Container names, host ports, and the `hrsot-data` **volume** are still per-project (`-p`), so each stack keeps its own data regardless of the image tag.
 
 ### On the cloud targets
 

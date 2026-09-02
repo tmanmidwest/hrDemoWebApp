@@ -1,7 +1,11 @@
 services:
   hr-sot:
     build: .
-    image: demo-hr-sot:local
+    # Image tag is overridable so multiple stacks on one host each build/tag a
+    # DISTINCT image (e.g. HRSOT_IMAGE=demo-hr-sot:acme). Leaving it unset keeps
+    # the shared default, which is fine for a single stack. Give each stack its
+    # own tag when you want to update or remove just one instance's image.
+    image: ${HRSOT_IMAGE:-demo-hr-sot:local}
     # Container name is overridable so a dev and a prod stack can coexist on the
     # same Docker host without a name collision (container names are global).
     container_name: ${HRSOT_CONTAINER_NAME:-demo-hr-sot}
@@ -49,7 +53,8 @@ services:
     build:
       context: .
       dockerfile: mcp_server/Dockerfile
-    image: demo-hr-mcp:local
+    # Overridable per stack, same as HRSOT_IMAGE above (e.g. demo-hr-mcp:acme).
+    image: ${HRMCP_IMAGE:-demo-hr-mcp:local}
     container_name: ${HRMCP_CONTAINER_NAME:-demo-hr-mcp}
     depends_on:
       hr-sot:
