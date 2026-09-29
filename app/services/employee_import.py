@@ -25,6 +25,11 @@ Design decisions baked in here:
   DB): a forward reference to another valid row in the same file is accepted.
 * **SSN is never emitted on export** (data-leak safety) — the column is present
   but blank. Import still accepts it.
+* **Custom fields ride along as extra columns** named after their key. The export
+  and template carry the ones marked "include in export" (plus every required
+  one); import reads *any* column whose header matches an active custom field, so
+  a required field can always be supplied. Required custom fields are enforced on
+  the resulting record, exactly as on the form and the API.
 """
 
 from __future__ import annotations
@@ -48,6 +53,7 @@ from app.models import (
     Location,
     StateProvince,
 )
+from app.services import custom_fields as cf
 from app.services.employee_validation import (
     normalize_ssn,
     validate_dob,
@@ -212,18 +218,49 @@ class ImportPreview:
 # ---------------------------------------------------------------------------
 
 
-def _write_csv(rows: list[dict[str, str]]) -> str:
+def _write_csv(rows: list[dict[str, str]], columns: list[str] | None = None) -> str:
     buffer = io.StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=COLUMNS, extrasaction="ignore")
+    writer = csv.DictWriter(
+        buffer, fieldnames=columns or COLUMNS, extrasaction="ignore"
+    )
     writer.writeheader()
     for row in rows:
         writer.writerow(row)
     return buffer.getvalue()
 
 
-def build_template_csv() -> str:
-    """A blank template: header row + one illustrative example row."""
-    return _write_csv(_EXAMPLE_ROWS)
+def export_columns(db: Session) -> list[str]:
+    """CSV header for the export/template: standard columns, then custom fields.
+
+    A custom field contributes a column named after its key when it's marked
+    "include in export". Required custom fields are always included — a template
+    you can't fill in would be useless.
+    """
+    keys = [
+        d.key
+        for d in cf.list_definitions(db, active_only=True)
+        if d.include_in_export or d.is_required
+    ]
+    return COLUMNS + keys
+
+
+def _custom_cell(data_type: str, value: object) -> str:
+    """Render a stored custom value for a CSV cell (round-trips through import)."""
+    if value is None:
+        return ""
+    if data_type == "boolean":
+        return "true" if value else "false"
+    return str(value)
+
+
+def build_template_csv(db: Session | None = None) -> str:
+    """A blank template: header row + one illustrative example row.
+
+    With a session, the instance's custom field columns are appended (blank in
+    the example row — we can't invent values for them).
+    """
+    columns = COLUMNS if db is None else export_columns(db)
+    return _write_csv(_EXAMPLE_ROWS, columns)
 
 
 def export_employees_csv(db: Session) -> str:
@@ -243,42 +280,49 @@ def export_employees_csv(db: Session) -> str:
         .order_by(Employee.employee_number)
         .all()
     )
+    definitions = [
+        d
+        for d in cf.list_definitions(db, active_only=True)
+        if d.include_in_export or d.is_required
+    ]
     rows: list[dict[str, str]] = []
     for e in employees:
-        rows.append(
-            {
-                "employee_number": e.employee_number,
-                "first_name": e.first_name,
-                "middle_name": e.middle_name or "",
-                "last_name": e.last_name,
-                "date_of_birth": e.date_of_birth.isoformat() if e.date_of_birth else "",
-                "ssn": "",  # never exported
-                "address_line_1": e.address_line_1 or "",
-                "address_line_2": e.address_line_2 or "",
-                "city": e.city or "",
-                "state_province": e.state_province.name if e.state_province else "",
-                "postal_code": e.postal_code or "",
-                "country": e.country.name if e.country else "",
-                "home_phone": e.home_phone or "",
-                "personal_email": e.personal_email or "",
-                "work_email": e.work_email or "",
-                "cost_center": e.cost_center or "",
-                "employment_status": e.employment_status.label
-                if e.employment_status
-                else "",
-                "department": e.department.name if e.department else "",
-                "job_title": e.job_title.name if e.job_title else "",
-                "location": e.location.name if e.location else "",
-                "hire_date": e.hire_date.isoformat() if e.hire_date else "",
-                "termination_date": e.termination_date.isoformat()
-                if e.termination_date
-                else "",
-                "supervisor_employee_number": e.supervisor.employee_number
-                if e.supervisor
-                else "",
-            }
-        )
-    return _write_csv(rows)
+        row = {
+            "employee_number": e.employee_number,
+            "first_name": e.first_name,
+            "middle_name": e.middle_name or "",
+            "last_name": e.last_name,
+            "date_of_birth": e.date_of_birth.isoformat() if e.date_of_birth else "",
+            "ssn": "",  # never exported
+            "address_line_1": e.address_line_1 or "",
+            "address_line_2": e.address_line_2 or "",
+            "city": e.city or "",
+            "state_province": e.state_province.name if e.state_province else "",
+            "postal_code": e.postal_code or "",
+            "country": e.country.name if e.country else "",
+            "home_phone": e.home_phone or "",
+            "personal_email": e.personal_email or "",
+            "work_email": e.work_email or "",
+            "cost_center": e.cost_center or "",
+            "employment_status": e.employment_status.label
+            if e.employment_status
+            else "",
+            "department": e.department.name if e.department else "",
+            "job_title": e.job_title.name if e.job_title else "",
+            "location": e.location.name if e.location else "",
+            "hire_date": e.hire_date.isoformat() if e.hire_date else "",
+            "termination_date": e.termination_date.isoformat()
+            if e.termination_date
+            else "",
+            "supervisor_employee_number": e.supervisor.employee_number
+            if e.supervisor
+            else "",
+        }
+        bag = e.custom_fields or {}
+        for d in definitions:
+            row[d.key] = _custom_cell(d.data_type, bag.get(d.key))
+        rows.append(row)
+    return _write_csv(rows, export_columns(db))
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +473,11 @@ def parse_and_classify(db: Session, csv_text: str) -> ImportPreview:
 
     headers = {h.strip() for h in reader.fieldnames if h}
     missing = [c for c in REQUIRED_FOR_NEW if c not in headers]
+    # A required custom field with no column in the file would fail every new row
+    # one by one; say it once, up front, like the standard columns.
+    missing += [
+        d.key for d in cf.required_definitions(db) if d.key not in headers
+    ]
     if missing:
         return ImportPreview(
             rows=[],
@@ -460,11 +509,21 @@ def classify_records(
     attaches coerced custom-field values (1-based line -> {key: value}).
     """
     # Phase A: resolve everything except supervisor.
+    definitions = cf.definitions_by_key(db)
     rows: list[ImportRow] = []
     for idx, raw in enumerate(raw_rows, start=1):
         row = _process_row(db, idx, raw, missing_ok=missing_ok)
+        # Plain CSV path: custom values arrive as columns named after the field
+        # key. Wizard path: they're pre-coerced in ``custom_by_index``.
+        if definitions:
+            present = {k: raw[k] for k in definitions if k in raw}
+            if present:
+                resolved = cf.resolve_custom_fields(db, present)
+                row.custom_fields.update(resolved.values)
+                row.errors.extend(resolved.errors)
         if custom_by_index:
-            row.custom_fields = custom_by_index.get(idx, {})
+            row.custom_fields.update(custom_by_index.get(idx, {}))
+        _check_required_custom(db, row)
         rows.append(row)
 
     # Phase B: supervisor resolution, now that we know which employee_numbers
@@ -473,6 +532,25 @@ def classify_records(
     _resolve_supervisors(db, rows)
 
     return ImportPreview(rows=rows)
+
+
+def _check_required_custom(db: Session, row: ImportRow) -> None:
+    """Flag a row whose *resulting* record would miss a required custom field.
+
+    On an update, the values already stored on the employee count — a blank cell
+    means "leave unchanged", so an existing value still satisfies the field.
+    """
+    if not cf.required_definitions(db):
+        return
+
+    bag: dict[str, object] = {}
+    if row.existing_id is not None:
+        existing = db.get(Employee, row.existing_id)
+        if existing is not None:
+            bag.update(existing.custom_fields or {})
+    bag.update(row.custom_fields)
+    for label in cf.missing_required(db, bag):
+        row.errors.append(f"{label} is required.")
 
 
 def _cell(raw: dict[str, str], col: str) -> str:

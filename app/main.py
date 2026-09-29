@@ -184,6 +184,7 @@ def create_app() -> FastAPI:
         redirect_to_login_handler,
     )
     from app.ui.account_routes import router as ui_account_router
+    from app.ui.custom_field_routes import router as ui_custom_field_router
     from app.ui.data_import_routes import router as ui_data_import_router
     from app.ui.employee_import_routes import router as ui_employee_import_router
     from app.ui.employee_routes import router as ui_employee_router
@@ -202,6 +203,7 @@ def create_app() -> FastAPI:
     app.include_router(ui_employee_import_router)
     app.include_router(ui_employee_router)
     app.include_router(ui_data_import_router)
+    app.include_router(ui_custom_field_router)
     app.include_router(ui_schema_router)
     app.include_router(ui_governance_router)
     app.include_router(ui_lookup_router)

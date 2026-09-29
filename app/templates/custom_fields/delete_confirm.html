@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set page_title = "Delete Custom Field" %}
+
+{% block breadcrumb %}
+<span>Admin</span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span><a href="/ui/admin/custom-fields">Custom Fields</a></span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>Delete</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Delete “{{ row.label }}”?</h1>
+    <p class="page-header__subtitle">
+      <strong>{{ filled }}</strong> employee(s) currently have a value for
+      <span class="mono">{{ row.key }}</span>.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="max-width: 640px;">
+  <div class="card__body">
+    <p class="text-muted mb-6">
+      Deleting removes the <em>definition</em>. The values already stored on those
+      employees stay in the database but become invisible — they stop appearing on
+      the employee form, in the API response, in the CSV export and in the
+      connector schema. Re-creating a field with the same key would surface them again.
+    </p>
+    <p class="text-muted mb-6">
+      If you only want the field out of the way, <strong>deactivate</strong> it
+      instead — same effect on the UI and API, fully reversible.
+    </p>
+
+    <div class="di-actions">
+      <a href="/ui/admin/custom-fields" class="btn btn--secondary">Cancel</a>
+      <a href="/ui/admin/custom-fields/{{ row.id }}/edit" class="btn btn--secondary">Deactivate instead</a>
+      <div class="flex-spacer"></div>
+      <form method="post" action="/ui/admin/custom-fields/{{ row.id }}/delete" style="margin:0;">
+        <input type="hidden" name="confirm" value="1" />
+        <button type="submit" class="btn btn--primary" style="background: var(--danger); border-color: var(--danger);">
+          Delete field definition
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

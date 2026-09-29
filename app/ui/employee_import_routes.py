@@ -53,6 +53,7 @@ def _csv_response(content: str, filename: str) -> Response:
 @router.get("/import/template.csv")
 def download_template(
     request: Request,
+    db: Session = Depends(get_db),
     user: AppUser = Depends(require_employee_manager),
 ) -> Response:
     record_event(
@@ -67,7 +68,9 @@ def download_template(
         request=request,
     )
     return _csv_response(
-        employee_import.build_template_csv(), "employee-import-template.csv"
+        # Pass the session so the instance's custom field columns are included.
+        employee_import.build_template_csv(db),
+        "employee-import-template.csv",
     )
 
 

@@ -50,6 +50,7 @@ request with 503** — so it's safe to deploy the container before configuring i
 | `list_employees` | `GET /api/v1/employees/` |
 | `get_employee` | `GET /api/v1/employees/{id}` |
 | `list_lookups` | `GET /api/v1/{lookup}/` |
+| `employee_attribute_schema` | `GET /api/v1/employees/schema` |
 | `headcount_report` | `GET /api/v1/reports/headcount` |
 | `org_report` | `GET /api/v1/reports/org` |
 | `activity_report` | `GET /api/v1/reports/activity` |
@@ -72,6 +73,14 @@ request with 503** — so it's safe to deploy the container before configuring i
 accept: `countries`, `states`, `statuses`, `departments`, `job_titles`,
 `locations`. The report tools are backed by the `/api/v1/reports/*` endpoints (see
 [API.md](API.md)).
+
+`create_employee` / `update_employee` accept a `custom_fields` object carrying this
+instance's admin-defined attributes (`{key: value}`; merged key-by-key on update).
+Some may be **required** — `employee_attribute_schema` lists them, and a required
+one is reported with `nullable: false`. Because required-ness is validated against
+the *resulting* record, an employee created before a field was marked required
+needs that value supplied before any other edit will go through. Custom fields are
+defined in the app under Admin → Custom Fields.
 
 The write surface is intentionally bounded to **employees and lookups**. Console-
 user management, API-key/OAuth administration, and backup (which contains secret

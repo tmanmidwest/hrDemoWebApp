@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set page_title = "Confirm Required Field" %}
+
+{% block breadcrumb %}
+<span>Admin</span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span><a href="/ui/admin/custom-fields">Custom Fields</a></span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>Confirm</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Make “{{ form.label }}” required?</h1>
+    <p class="page-header__subtitle">
+      {{ missing }} of {{ roster_total }} employee(s) have no value for
+      <span class="mono">{{ form.key }}</span>.
+    </p>
+  </div>
+</div>
+
+<div class="card" style="max-width: 640px;">
+  <div class="card__body">
+    <p class="text-muted mb-6">
+      Required is enforced on the <em>resulting</em> record, so those employees will
+      fail their next save — on the employee form, through
+      <span class="mono">PATCH /api/v1/employees/{id}</span>, and on import — until a
+      value is supplied. Existing records are not modified now, and nothing else breaks.
+    </p>
+    <p class="text-muted mb-6">
+      A good order of operations: create the field as optional, backfill it (the
+      <a href="/ui/admin/import">Data Import</a> wizard can do that from a
+      spreadsheet), then come back and mark it required.
+    </p>
+
+    <div class="di-actions">
+      <a href="/ui/admin/custom-fields" class="btn btn--secondary">Cancel</a>
+      <div class="flex-spacer"></div>
+      <form method="post" action="{{ form_action }}" style="margin:0;">
+        <input type="hidden" name="confirm" value="1" />
+        <input type="hidden" name="label" value="{{ form.label }}" />
+        <input type="hidden" name="key" value="{{ form.key }}" />
+        <input type="hidden" name="data_type" value="{{ form.data_type }}" />
+        <input type="hidden" name="description" value="{{ form.description }}" />
+        <input type="hidden" name="display_order" value="{{ form.display_order }}" />
+        <input type="hidden" name="is_required" value="1" />
+        {% if form.is_active %}<input type="hidden" name="is_active" value="1" />{% endif %}
+        {% if form.include_in_export %}<input type="hidden" name="include_in_export" value="1" />{% endif %}
+        <button type="submit" class="btn btn--primary">
+          {% if row %}Save as required{% else %}Create as required{% endif %}
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

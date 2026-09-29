@@ -29,7 +29,7 @@ from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
 from app.services import reference_managers
 from app.services.audit import principal_actor, record_event
 from app.services.auth import Principal, require_scope
-from app.services.custom_fields import resolve_custom_fields
+from app.services.custom_fields import missing_required, resolve_custom_fields
 from app.services.employee_validation import (
     resolve_employment_status_by_value,
     validate_country_id,
@@ -53,6 +53,26 @@ router = APIRouter(prefix="/employees", tags=["employees"])
 def _emp_label(employee: Employee) -> str:
     """Human label for an employee in audit events."""
     return f"{employee.first_name} {employee.last_name} ({employee.employee_number})"
+
+
+def _require_custom_fields(db: Session, bag: dict[str, object]) -> None:
+    """400 if the resulting ``custom_fields`` bag misses a required attribute.
+
+    Required-ness lives in the custom field registry (admin-managed), so what the
+    API rejects shifts with the instance's configuration — the live contract is
+    published at ``GET /api/v1/employees/schema``, where a required custom field
+    reports ``nullable: false``.
+    """
+    missing = missing_required(db, bag)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Missing required custom field(s): "
+                + ", ".join(missing)
+                + ". See GET /api/v1/employees/schema for the current attribute contract."
+            ),
+        )
 
 
 # Whitelist of sortable columns to prevent SQL injection via the sort parameter.
@@ -292,6 +312,7 @@ def create_employee(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="; ".join(resolved.errors),
         )
+    _require_custom_fields(db, resolved.values)
     employee = Employee(**payload, custom_fields=resolved.values)
     db.add(employee)
     try:
@@ -421,7 +442,10 @@ def update_employee(
         )
 
     # Custom fields merge: coerce against the registry, then overlay onto the
-    # existing bag (omitted keys are untouched).
+    # existing bag (omitted keys are untouched). Required fields are checked
+    # against the *resulting* bag, so an update can never leave a record short
+    # of a required attribute — including a record that predates the field.
+    merged_custom = dict(employee.custom_fields or {})
     if "custom_fields" in data:
         incoming = data.pop("custom_fields") or {}
         resolved = resolve_custom_fields(db, incoming)
@@ -430,9 +454,9 @@ def update_employee(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="; ".join(resolved.errors),
             )
-        merged = dict(employee.custom_fields or {})
-        merged.update(resolved.values)
-        employee.custom_fields = merged
+        merged_custom.update(resolved.values)
+        employee.custom_fields = merged_custom
+    _require_custom_fields(db, merged_custom)
 
     for field, value in data.items():
         setattr(employee, field, value)

@@ -127,6 +127,36 @@ The recommended pattern is to set `is_active = false` rather than delete — tha
 
 **System-flagged employment statuses** (`Active`, `Not Active`) cannot be deleted at all, and their numeric `value` cannot be changed (Saviynt and other IGA systems may depend on these values being stable). The delete button doesn't appear for system rows, and the value field is read-only in the edit form.
 
+### Custom Fields (`/ui/admin/custom-fields`)
+
+**Admin-only.** The registry of extra employee attributes for this instance. Each
+definition has a label, an immutable machine `key`, a type (`text`, `number`,
+`Yes/No`, `date`), an optional description, a display order, and three toggles:
+
+- **Required** — a value must be present for every employee. Enforced on the
+  employee form, on `POST /api/v1/employees` and `PATCH /api/v1/employees/{id}`,
+  and on both CSV and wizard imports. Because the check runs against the
+  *resulting* record, an employee that predates the field will fail its next save
+  until the value is supplied — so marking an existing field required shows an
+  interstitial with the number of employees currently missing a value.
+- **Include in export** — the field becomes a column (named after its key) in the
+  employee CSV export and template. Import reads any column whose header matches
+  an active field's key, whether or not this toggle is on, so a required field can
+  always be filled in.
+- **Active** — inactive fields disappear from the form, the API schema and
+  exports; stored values are kept.
+
+Fields created here behave identically to the ones the Data Import wizard
+(`/ui/admin/import`) creates from a spreadsheet column — it's the same registry. A field's `key` cannot
+be changed after creation (it's the key inside each employee's `custom_fields`
+JSON, the CSV header, and the attribute path a connector is wired to), and its
+type is locked once any employee holds a value.
+
+Deleting a definition removes it from the UI, the API and the connector schema but
+leaves the stored values in each employee's `custom_fields` bag; the confirm screen
+says so and offers **deactivate** as the reversible alternative. Every create,
+edit and delete is written to the audit log (`lookup.custom_field.*`).
+
 ### Settings (`/ui/settings`)
 
 Settings is **admin-only** and collapsed behind a single sidebar link. The landing page (`/ui/settings`) is a hub of cards linking to each area: Users, API Keys, OAuth Clients, Identity Providers, Branding, System, Backup & Restore, and Reset Data.

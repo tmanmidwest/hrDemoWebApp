@@ -22,7 +22,7 @@ from app.db import get_db
 from app.models import AppUser, ImportBatch, ImportProfile
 from app.services import data_import
 from app.services.audit import record_event
-from app.services.custom_fields import slugify_key
+from app.services.custom_fields import safe_key
 from app.ui.dependencies import require_admin
 from app.ui.flash import flash
 from app.ui.templating import render
@@ -61,7 +61,7 @@ def _option_to_spec(source_col: str, option: str) -> dict:
     """Map a submitted <select> option value back to a stored column spec."""
     if option.startswith(data_import.CUSTOM_PREFIX):
         data_type = option[len(data_import.CUSTOM_PREFIX):] or "text"
-        key = slugify_key(source_col) or "field"
+        key = safe_key(source_col)
         return {
             "target": f"{data_import.CUSTOM_PREFIX}{key}",
             "label": source_col,

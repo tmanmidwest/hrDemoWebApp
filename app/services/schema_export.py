@@ -135,7 +135,9 @@ def build_schema(db: Session) -> dict[str, Any]:
             {
                 "path": path,
                 "type": _CUSTOM_TYPE_MAP.get(d.data_type, "string"),
-                "nullable": True,
+                # Admin-managed: a custom field marked required in the registry is
+                # enforced on write, so the connector contract says so too.
+                "nullable": not d.is_required,
                 "group": "custom",
                 "description": d.description or f"Custom attribute “{d.label}”.",
                 "example": _example_str(
@@ -186,6 +188,8 @@ def build_schema(db: Session) -> dict[str, Any]:
                 "label": d.label,
                 "data_type": d.data_type,
                 "description": d.description,
+                "required": d.is_required,
+                "in_csv_export": d.include_in_export,
             }
             for d in definitions
         ],

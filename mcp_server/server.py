@@ -269,6 +269,7 @@ async def create_employee(
     cost_center: str | None = None,
     termination_date: str | None = None,
     location_id: int | None = None,
+    custom_fields: dict[str, Any] | None = None,
 ) -> Any:
     """Create a new employee and return the created record.
 
@@ -283,6 +284,11 @@ async def create_employee(
     `hire_date`, and `supervisor_id` are optional and may be filled in later.
     `ssn` may include separators (they're stripped to 9 digits) and must be
     unique.
+
+    `custom_fields` carries this instance's admin-defined attributes as
+    `{key: value}`. Some of them may be *required* — call
+    `employee_attribute_schema` for the live list, where a required attribute
+    reports `nullable: false`.
     """
     return await _request(
         "POST",
@@ -311,6 +317,7 @@ async def create_employee(
             "cost_center": cost_center,
             "termination_date": termination_date,
             "location_id": location_id,
+            "custom_fields": custom_fields,
         },
     )
 
@@ -342,6 +349,7 @@ async def update_employee(
     termination_date: str | None = None,
     supervisor_id: int | None = None,
     location_id: int | None = None,
+    custom_fields: dict[str, Any] | None = None,
 ) -> Any:
     """Partially update an employee (PATCH). Only the fields you pass are changed;
     omitted fields are left as-is. Returns the updated record.
@@ -350,6 +358,11 @@ async def update_employee(
     `employment_status_value` (stable IGA code: 1=Active, 0=Not Active,
     3=Terminated) — supplying both is an error. To disable/terminate an employee
     prefer the dedicated `archive_employee` / `terminate_employee` tools.
+
+    `custom_fields` is merged key-by-key into the employee's existing custom
+    attributes. Required attributes are checked against the *resulting* record, so
+    an employee created before a custom field was marked required needs that value
+    supplied here before any other edit will go through.
     """
     return await _request(
         "PATCH",
@@ -379,8 +392,22 @@ async def update_employee(
             "termination_date": termination_date,
             "supervisor_id": supervisor_id,
             "location_id": location_id,
+            "custom_fields": custom_fields,
         },
     )
+
+
+@mcp.tool()
+async def employee_attribute_schema() -> Any:
+    """Describe every attribute the employee API exposes for THIS instance.
+
+    Includes the admin-defined custom fields, which vary per instance: each entry
+    under `custom_fields` carries its `key`, `data_type` and whether it is
+    `required`. Call this before creating or updating an employee if you need to
+    know which custom attributes exist (a required one reports `nullable: false`
+    in the `attributes` list and must be supplied in `custom_fields`).
+    """
+    return await _get("/api/v1/employees/schema")
 
 
 @mcp.tool()

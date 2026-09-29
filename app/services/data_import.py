@@ -45,7 +45,7 @@ from app.services.custom_fields import (
     coerce_value,
     definitions_by_key,
     ensure_definition,
-    slugify_key,
+    safe_key,
 )
 from app.services.employee_import import COLUMNS
 
@@ -256,7 +256,7 @@ def suggest_mapping(source_columns: list[str]) -> dict[str, dict[str, str]]:
             used_standard.add(target)
             continue
         # Fall back to a custom field named after the column.
-        key = slugify_key(col) or "field"
+        key = safe_key(col)
         mapping[col] = {"target": f"{CUSTOM_PREFIX}{key}", "label": col}
     return mapping
 

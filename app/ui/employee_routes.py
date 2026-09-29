@@ -608,18 +608,19 @@ def _custom_field_inputs(
     *,
     employee: Employee | None = None,
     submitted: object | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, object]]:
     """Editable custom-field descriptors for the create/edit form.
 
-    Each item is {key, label, data_type, description, value}. ``value`` is a
-    string suitable for the control: booleans render as ""/"true"/"false".
+    Each item is {key, label, data_type, description, is_required, value}.
+    ``value`` is a string suitable for the control: booleans render as
+    ""/"true"/"false".
     Source of the value: the re-submitted form (on validation error), else the
     existing employee (edit), else blank (new).
     """
     from app.services import custom_fields as cf
 
     stored = (employee.custom_fields or {}) if employee is not None else {}
-    inputs: list[dict[str, str]] = []
+    inputs: list[dict[str, object]] = []
     for d in cf.list_definitions(db, active_only=True):
         if submitted is not None:
             value = str(submitted.get(f"cf_{d.key}") or "")  # type: ignore[union-attr]
@@ -635,6 +636,7 @@ def _custom_field_inputs(
                 "label": d.label,
                 "data_type": d.data_type,
                 "description": d.description or "",
+                "is_required": d.is_required,
                 "value": value,
             }
         )
@@ -649,7 +651,8 @@ def _apply_custom_fields(
     Starts from the employee's existing bag (edit) or empty (create). For each
     active definition present in the form, a blank clears the value and a
     non-blank is coerced to the field's type. Values for inactive definitions are
-    left untouched. Returns (merged_bag, errors).
+    left untouched. Fields marked required must end up with a value — including
+    on an edit of a record that predates the field. Returns (merged_bag, errors).
     """
     from app.services import custom_fields as cf
 
@@ -669,6 +672,10 @@ def _apply_custom_fields(
                 merged[d.key] = cf.coerce_value(d.data_type, raw)
             except cf.CustomFieldError as exc:
                 errors.append(f"{d.label}: {exc}")
+
+    # Validate the resulting record, not just what was submitted.
+    for label in cf.missing_required(db, merged):
+        errors.append(f"{label} is required.")
     return merged, errors
 
 
@@ -852,7 +859,7 @@ def _render_form_with_error(
     form_data: dict[str, object],
     error_msg: str,
     must_have_supervisor: bool,
-    custom_field_inputs: list[dict[str, str]] | None = None,
+    custom_field_inputs: list[dict[str, object]] | None = None,
 ) -> Response:
     dropdowns = _form_dropdown_data(
         db,

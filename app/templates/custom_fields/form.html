@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% set page_title = "Edit Custom Field" if row else "Add Custom Field" %}
+
+{% block breadcrumb %}
+<span>Admin</span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span><a href="/ui/admin/custom-fields">Custom Fields</a></span>
+<span class="topbar__breadcrumb-sep">/</span>
+<span>{{ "Edit · " ~ row.label if row else "New" }}</span>
+{% endblock %}
+
+{% block main %}
+<div class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{% if row %}Edit custom field{% else %}Add custom field{% endif %}</h1>
+    <p class="page-header__subtitle">
+      {% if row %}
+      The key <span class="mono">{{ row.key }}</span> can't be changed — it's the
+      attribute name already exposed to the API, CSV export and any wired connector.
+      {% if filled %}<strong>{{ filled }}</strong> employee(s) currently hold a value.{% endif %}
+      {% else %}
+      Appears on the employee form and under <span class="mono">custom_fields</span> on the API.
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-header__actions">
+    <a href="/ui/admin/custom-fields" class="btn btn--ghost">← Back</a>
+  </div>
+</div>
+
+{% if error %}<div class="inline-error">{{ error }}</div>{% endif %}
+
+<form method="post" action="{{ form_action }}" class="card" style="max-width: 640px;">
+  <div class="card__body">
+    <div class="form-row">
+      <label class="label" for="label">Label<span class="label__required">*</span></label>
+      <input class="input" id="label" name="label" value="{{ form.label or '' }}" required maxlength="100"
+             {% if not row %}oninput="syncKey(this.value)"{% endif %} />
+      <div class="form-hint">What a person sees, e.g. "Worker Type", "Cost Center Code".</div>
+    </div>
+
+    <div class="form-row">
+      <label class="label" for="key">Key{% if not row %}<span class="label__required">*</span>{% endif %}</label>
+      <input class="input mono" id="key" name="key" value="{{ form.key or '' }}" maxlength="64"
+             {% if row %}readonly{% endif %} pattern="[a-z][a-z0-9_]*" />
+      <div class="form-hint">
+        {% if row %}
+        Immutable. Attribute path: <span class="mono">custom_fields.{{ row.key }}</span>
+        {% else %}
+        Machine name used by the API, CSV header and connector. Derived from the
+        label — edit it if you need something specific. Lowercase letters,
+        numbers and underscores.
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="form-grid form-grid--2col">
+      <div>
+        <label class="label" for="data_type">Type<span class="label__required">*</span></label>
+        <select class="select" id="data_type" name="data_type">
+          {% for value, label in type_labels %}
+          <option value="{{ value }}" {% if form.data_type == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-hint">
+          {% if row and filled %}Can't be changed while employees hold values.{% else %}Drives the input control and how values are validated on import.{% endif %}
+        </div>
+      </div>
+      <div>
+        <label class="label" for="display_order">Display order</label>
+        <input class="input mono" type="number" id="display_order" name="display_order"
+               value="{{ form.display_order }}" step="10" />
+        <div class="form-hint">Lower numbers come first on the employee form.</div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label class="label" for="description">Description</label>
+      <input class="input" id="description" name="description" value="{{ form.description or '' }}" maxlength="255" />
+      <div class="form-hint">Optional hint shown under the input, and used as the attribute description in the connector schema.</div>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_required" name="is_required" value="1" {% if form.is_required %}checked{% endif %} />
+      <label for="is_required">Required — every employee must have a value (enforced on the form, the API, and imports)</label>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="include_in_export" name="include_in_export" value="1" {% if form.include_in_export %}checked{% endif %} />
+      <label for="include_in_export">Include as a column in the employee CSV export (and read it back on import)</label>
+    </div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="is_active" name="is_active" value="1" {% if form.is_active %}checked{% endif %} />
+      <label for="is_active">Active — inactive fields are hidden from the form, the API schema and exports; stored values are kept</label>
+    </div>
+  </div>
+  <div class="form-actions" style="padding: var(--s-5) var(--s-6);">
+    <a href="/ui/admin/custom-fields" class="btn btn--secondary">Cancel</a>
+    <button type="submit" class="btn btn--primary">{% if row %}Save{% else %}Create{% endif %}</button>
+  </div>
+</form>
+
+{% if not row %}
+<script>
+  // Mirror the label into the key until the admin edits the key by hand.
+  let keyTouched = false;
+  document.getElementById('key').addEventListener('input', () => { keyTouched = true; });
+  function syncKey(value) {
+    if (keyTouched) return;
+    document.getElementById('key').value = value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .replace(/^([0-9])/, 'f_$1');
+  }
+</script>
+{% endif %}
+{% endblock %}

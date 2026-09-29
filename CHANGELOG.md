@@ -6,6 +6,41 @@ The format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 Database migrations run automatically on startup; changes are backward-compatible
 unless a **Breaking** section says otherwise.
 
+## [1.11.0] — 2026-09-29
+
+### Added
+
+- **Custom field management (`/ui/admin/custom-fields`).** Admin-only CRUD for the
+  custom field registry, which until now could only be populated implicitly by the
+  Data Import wizard. Define a field by hand with a label, type (text / number /
+  yes-no / date), description and display order; reorder, retire or delete it.
+  The key is derived from the label, is validated against the standard employee
+  columns, and is immutable after creation (it's the key inside each employee's
+  `custom_fields` bag, the CSV header, and the attribute path a connector is wired
+  to). A field's type is locked once any employee holds a value.
+- **Required custom fields.** New `is_required` flag, enforced on the *resulting*
+  record across every write surface: the employee create/edit form, the REST API
+  (`POST /api/v1/employees`, `PATCH /api/v1/employees/{id}`), and both the plain
+  CSV import and the Data Import wizard. `GET /api/v1/employees/schema` reports a
+  required custom field as `nullable: false`, and each entry in its `custom_fields`
+  list now carries `required` and `in_csv_export`.
+- **Custom fields in the employee CSV.** The `include_in_export` flag (previously
+  declared but never honored) now adds a column named after the field's key to the
+  employee CSV export and the import template, and import reads any column whose
+  header matches an active field — so `export → edit → re-import` round-trips
+  custom values. A required field missing its column is reported once, up front,
+  alongside the standard missing-column check.
+
+### Changed
+
+- Marking an existing field required first shows how many employees have no value
+  for it, since those records fail their next save until the value is supplied.
+- Deleting a definition warns that stored values stay in each employee's JSON bag
+  (invisible until a field with the same key is re-created) and offers deactivate
+  as the reversible alternative.
+- The employee form's "Custom attributes" hint now points at Custom Fields rather
+  than Data Import, and required fields are marked with an asterisk.
+
 ## [1.9.0] — 2026-08-20
 
 ### Added

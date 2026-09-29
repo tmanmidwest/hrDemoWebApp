@@ -9,7 +9,7 @@ Why a registry (rather than just an open JSON blob):
 
 * The API can advertise a stable, typed shape to downstream systems (Saviynt).
 * The import wizard and the employee UI can render the right controls and
-  coerce/validate values per type.
+  coerce/validate values per type, and enforce required-ness.
 * Export knows exactly which keys to emit as columns.
 
 Keys are slugs (``worker_type``, ``cost_center_code``) — stable, machine-facing
@@ -54,6 +54,12 @@ class CustomFieldDefinition(Base, TimestampMixin):
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Whether a value must be present for every employee. Enforced on the
+    # employee UI form, the API (create + update), and CSV/wizard import.
+    is_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
     # Whether this field is emitted as a column on CSV export.
     include_in_export: Mapped[bool] = mapped_column(
